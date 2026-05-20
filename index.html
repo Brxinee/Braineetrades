@@ -798,6 +798,7 @@ function renderBacktest(data) {
 
   // Equity curve
   const eq = s.equity_curve || [];
+  window._btLastEq = eq.length > 2 ? eq : null;
   if (eq.length > 2) renderBtChart(eq);
   else $('bt-chart').innerHTML = '<div style="color:var(--muted);text-align:center;padding:32px 0">No trades</div>';
 

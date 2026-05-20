@@ -104,11 +104,18 @@ async def backtest(body: BacktestRequest):
     all_symbols = [s["symbol"] for s in universe]
 
     if body.symbols:
-        symbols = [s for s in body.symbols if s in sym_set]
+        unknown = [s for s in body.symbols if s not in sym_set]
+        if unknown:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown symbols (not in Nifty 50 universe): {unknown}. "
+                       f"Check nifty50.json for valid tickers.",
+            )
+        symbols = body.symbols
         if not symbols:
             raise HTTPException(
                 status_code=400,
-                detail="None of the requested symbols are in the Nifty 50 universe.",
+                detail="Symbol list is empty.",
             )
     else:
         symbols = all_symbols
