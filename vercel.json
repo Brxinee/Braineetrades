@@ -1,8 +1,5 @@
 {
   "version": 2,
-  "functions": {
-    "api/backtest.py": { "maxDuration": 300 }
-  },
   "builds": [
     {
       "src": "api/*.py",
