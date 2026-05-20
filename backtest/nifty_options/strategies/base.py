@@ -33,6 +33,9 @@ class Strategy(ABC):
     """
 
     name: str = "unnamed"
+    # Updated by run_strategy() after each session so gap-aware strategies can
+    # compute the overnight gap (today_open − prev_close).
+    prev_close: float | None = None
 
     @abstractmethod
     def generate_signals(

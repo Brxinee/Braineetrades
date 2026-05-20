@@ -1,4 +1,7 @@
-"""ORB-15: Opening Range Breakout (first 15 minutes = first 3 × 5-min bars)."""
+"""ORB-15: Opening Range Breakout (first 3 × 5-min bars = 15 minutes).
+
+ORB-30 and FH-BO inherit from this class and just override `_bars`.
+"""
 
 from __future__ import annotations
 
@@ -9,21 +12,21 @@ import pandas as pd
 from ..indicators import orb
 from .base import Signal, Strategy
 
+_MIN_RISK_PTS = 5.0   # discard signals with SL width < 5 NIFTY points
+
 
 class ORB15Strategy(Strategy):
     """15-minute Opening Range Breakout on NIFTY 50 weekly options.
 
-    Rules
-    -----
-    Opening range : high and low of the first 3 × 5-min bars (9:15–9:30 IST).
-    Entry         : first bar (from 9:30 onward) that closes above the ORB
-                    high (buy CE) or below the ORB low (buy PE).
+    Opening range : high/low of the first `_bars` × 5-min bars.
+    Entry         : first close outside the range (CE above, PE below).
     Stop-loss     : opposite end of the opening range.
-    Target        : entry_spot ± ORB_width  (1:1 risk-reward in spot space).
+    Target        : entry ± ORB_width  (1:1 risk-reward in spot space).
     Frequency     : at most ONE signal per day (first breakout only).
     """
 
     name = "ORB-15"
+    _bars: int = 3   # subclasses override: ORB-30 → 6, FH-BO → 12
 
     def generate_signals(
         self,
@@ -31,43 +34,52 @@ class ORB15Strategy(Strategy):
         trade_date: date,
         vix: float,
     ) -> list[Signal]:
-        if df_5m.empty or len(df_5m) < 4:
+        if df_5m.empty or len(df_5m) < self._bars + 1:
             return []
 
-        orb_df = orb(df_5m, bars=3)
+        orb_df = orb(df_5m, bars=self._bars)
         signals: list[Signal] = []
         emitted = False
 
-        for ts, row in df_5m.iterrows():
-            if not orb_df.loc[ts, "complete"]:
-                continue          # still inside the 3-bar opening range
+        highs = df_5m["high"].values
+        lows = df_5m["low"].values
+        closes = df_5m["close"].values
+        timestamps = df_5m.index
+        complete = orb_df["complete"].values
+        orb_high_arr = orb_df["orb_high"].values
+        orb_low_arr = orb_df["orb_low"].values
+
+        for i in range(len(df_5m)):
+            if not complete[i]:
+                continue
             if emitted:
-                break             # only the first breakout fires
+                break
 
-            orb_high = orb_df.loc[ts, "orb_high"]
-            orb_low = orb_df.loc[ts, "orb_low"]
+            orb_high = orb_high_arr[i]
+            orb_low = orb_low_arr[i]
             orb_width = orb_high - orb_low
-            close = row["close"]
+            close = closes[i]
+            ts = timestamps[i]
 
-            if close > orb_high:
+            if close > orb_high and orb_width >= _MIN_RISK_PTS:
                 signals.append(
                     Signal(
                         time=ts,
                         direction="CE",
                         spot_sl=orb_low,
                         spot_target=close + orb_width,
-                        tag=f"ORB15-CE range={orb_low:.0f}/{orb_high:.0f}",
+                        tag=f"ORB{self._bars * 5}-CE",
                     )
                 )
                 emitted = True
-            elif close < orb_low:
+            elif close < orb_low and orb_width >= _MIN_RISK_PTS:
                 signals.append(
                     Signal(
                         time=ts,
                         direction="PE",
                         spot_sl=orb_high,
                         spot_target=close - orb_width,
-                        tag=f"ORB15-PE range={orb_low:.0f}/{orb_high:.0f}",
+                        tag=f"ORB{self._bars * 5}-PE",
                     )
                 )
                 emitted = True

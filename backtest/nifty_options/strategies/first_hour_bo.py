@@ -1,1 +1,8 @@
-# CHECKPOINT 5 — First Hour Breakout: breakout of 9:15–10:15 high/low range
+"""First Hour Breakout: 60-minute opening range (first 12 × 5-min bars)."""
+
+from .orb15 import ORB15Strategy
+
+
+class FirstHourBOStrategy(ORB15Strategy):
+    name = "FH-BO"
+    _bars = 12

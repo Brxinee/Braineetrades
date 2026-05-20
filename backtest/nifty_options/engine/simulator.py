@@ -268,5 +268,9 @@ def run_strategy(
         )
         all_trades.extend(day_trades)
 
+        # Give gap-aware strategies access to today's closing price
+        if not df_day.empty:
+            strategy.prev_close = float(df_day["close"].iloc[-1])
+
     log.info("Done: %d trades, capital=%.0f", len(all_trades), capital)
     return all_trades, capital
