@@ -1,0 +1,5 @@
+{
+  "leaderboard": [],
+  "generated_at": null,
+  "_note": "Run `python -m backtest.runner --strategy all` to populate."
+}
