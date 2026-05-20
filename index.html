@@ -139,6 +139,25 @@ td:first-child{text-align:left}
 /* Toast */
 .toast{position:fixed;bottom:24px;right:24px;background:var(--bg2);border:1px solid var(--green);color:var(--text);font-size:13px;padding:12px 18px;border-radius:6px;z-index:500;opacity:0;transform:translateY(10px);transition:opacity .2s,transform .2s;pointer-events:none;max-width:320px}
 .toast.show{opacity:1;transform:translateY(0)}
+/* ── Backtest Lab ────────────────────────────────────────────────────────── */
+.bt-form{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px 22px;margin-bottom:24px}
+.bt-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:12px}
+.bt-field{display:flex;flex-direction:column;gap:5px}
+.bt-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.bt-input{background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--fb);font-size:13px;padding:8px 12px;border-radius:6px;outline:none;width:100%;-webkit-appearance:none}
+.bt-input:focus{border-color:var(--green)}
+.bt-input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.4)}
+.bt-sym-row{margin-bottom:14px}
+.bt-note{font-size:11px;color:var(--muted);margin-top:10px}
+.bt-loading{text-align:center;padding:64px 0;display:none}
+.bt-loading-h{font-family:var(--fh);font-size:28px;font-weight:900;color:var(--muted);letter-spacing:.04em;margin-bottom:8px}
+.bt-loading-sub{font-size:12px;color:var(--muted)}
+.bt-results{display:none}
+.bt-exit-grid{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.bt-exit-pill{background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:5px 14px;display:flex;align-items:baseline;gap:5px}
+.bep-n{font-family:var(--fh);font-size:20px;font-weight:900}
+.bep-l{font-size:11px;color:var(--muted)}
+#bt-chart{min-height:160px;border-radius:6px;overflow:hidden}
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media(max-width:640px){
   header{padding:0 14px;gap:12px}
@@ -224,9 +243,72 @@ td:first-child{text-align:left}
 
   <!-- ── TAB 3: BACKTEST LAB ───────────────────────────────────────────── -->
   <section class="pane" id="pane-backtest">
-    <div class="empty">
-      <div class="empty-h">BACKTEST LAB</div>
-      <div class="empty-s">Coming in Item 7 — interactive backtester via /api/backtest</div>
+    <div class="ptitle">BACKTEST LAB</div>
+
+    <!-- ── Form ──────────────────────────────────────────────────────────── -->
+    <div class="bt-form">
+      <div class="bt-fields">
+        <div class="bt-field">
+          <label class="bt-label" for="bt-strategy">Strategy</label>
+          <select id="bt-strategy" class="bt-input sc-select" aria-label="Strategy">
+            <option value="vwap_reversal">VWAP Reversal</option>
+            <option value="opening_range_breakout">Opening Range Breakout</option>
+            <option value="supertrend_ema" selected>Supertrend + EMA</option>
+            <option value="rsi_divergence">RSI Divergence</option>
+            <option value="gap_fade">Gap Fade</option>
+          </select>
+        </div>
+        <div class="bt-field">
+          <label class="bt-label" for="bt-start">Start Date</label>
+          <input id="bt-start" type="date" class="bt-input" autocomplete="off">
+        </div>
+        <div class="bt-field">
+          <label class="bt-label" for="bt-end">End Date</label>
+          <input id="bt-end" type="date" class="bt-input" autocomplete="off">
+        </div>
+        <div class="bt-field">
+          <label class="bt-label" for="bt-capital">Capital (₹)</label>
+          <input id="bt-capital" type="number" class="bt-input" value="100000" min="10000" step="10000" autocomplete="off">
+        </div>
+      </div>
+      <div class="bt-sym-row">
+        <label class="bt-label" for="bt-sym-input">
+          Symbols <span class="dim" style="text-transform:none;letter-spacing:0;font-size:10px">— optional, comma-separated .NS tickers; blank = all Nifty 50</span>
+        </label>
+        <input id="bt-sym-input" type="text" class="bt-input" style="margin-top:5px" placeholder="e.g. RELIANCE.NS, TCS.NS, INFY.NS" autocomplete="off">
+      </div>
+      <button class="sc-run-btn" id="bt-run">⬤ RUN BACKTEST</button>
+      <div class="bt-note">5-min data is limited to 60 days · 50 symbols ≈ 30–90 s</div>
+    </div>
+
+    <!-- ── Loading ────────────────────────────────────────────────────────── -->
+    <div class="bt-loading" id="bt-loading">
+      <div class="bt-loading-h">RUNNING…</div>
+      <div class="bt-loading-sub" id="bt-loading-sub">Fetching 5-min data and running simulation</div>
+    </div>
+
+    <!-- ── Results ────────────────────────────────────────────────────────── -->
+    <div class="bt-results" id="bt-results">
+      <div class="sh">Summary</div>
+      <div class="mgrid" id="bt-mgrid"></div>
+      <div class="sh">Equity Curve</div>
+      <div id="bt-chart"></div>
+      <div class="sh">Exit Breakdown</div>
+      <div class="bt-exit-grid" id="bt-exits"></div>
+      <div class="sh">By Symbol</div>
+      <div class="sgrid" id="bt-sym-grid"></div>
+      <div class="sh">Last 20 Trades</div>
+      <div style="overflow-x:auto">
+        <table class="tlog">
+          <thead>
+            <tr>
+              <th>Date / Time</th><th>Symbol</th><th>Entry ₹</th>
+              <th>Exit ₹</th><th>Qty</th><th>P&amp;L</th><th>Exit</th>
+            </tr>
+          </thead>
+          <tbody id="bt-trades"></tbody>
+        </table>
+      </div>
     </div>
   </section>
 
@@ -637,10 +719,158 @@ function logTrade(sig) {
 $('sc-run').addEventListener('click', runScan);
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB 3 — BACKTEST LAB
+// ═══════════════════════════════════════════════════════════════════════════════
+let _btChart = null;
+
+function initBacktest() {
+  const today = new Date();
+  const pad   = n => String(n).padStart(2,'0');
+  const fmt   = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const start = new Date(today); start.setDate(today.getDate()-14);
+  $('bt-end').max   = fmt(today);
+  $('bt-end').value = fmt(today);
+  $('bt-start').max = fmt(today);
+  $('bt-start').value = fmt(start);
+}
+
+async function runBacktest() {
+  const btn      = $('bt-run');
+  const strategy = $('bt-strategy').value;
+  const start    = $('bt-start').value;
+  const end      = $('bt-end').value;
+  const capital  = Number($('bt-capital').value) || 100000;
+  const symRaw   = $('bt-sym-input').value.trim();
+  const symbols  = symRaw ? symRaw.split(',').map(s=>s.trim()).filter(Boolean) : null;
+
+  if (!start || !end) { showToast('Set start and end dates.'); return; }
+  const spanDays = (new Date(end) - new Date(start)) / 86400000;
+  if (spanDays < 1) { showToast('End date must be after start date.'); return; }
+  if (spanDays > 60) { showToast('Date range cannot exceed 60 days.'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'RUNNING…';
+  $('bt-loading').style.display = 'block';
+  $('bt-results').style.display = 'none';
+  $('bt-loading-sub').textContent = symbols
+    ? `Fetching 5-min data for ${symbols.length} symbol${symbols.length!==1?'s':''}`
+    : 'Fetching 5-min data for all 50 Nifty symbols — this may take 30–90 s';
+
+  try {
+    const body = { strategy, start, end, capital };
+    if (symbols) body.symbols = symbols;
+    const r = await fetch('/api/backtest', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.status);
+    renderBacktest(data);
+    $('bt-results').style.display = 'block';
+    $('bt-results').scrollIntoView({behavior:'smooth',block:'start'});
+  } catch(e) {
+    showToast('Backtest error: '+e.message, 5000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⬤ RUN BACKTEST';
+    $('bt-loading').style.display = 'none';
+  }
+}
+
+function renderBacktest(data) {
+  const s = data.summary || {};
+  const trades = data.trades || [];
+  const perSym = data.per_symbol || {};
+
+  // Metric cards
+  const cards = [
+    {l:'Total P&L',     v:f.inr(s.total_pnl),          c:clr(s.total_pnl)},
+    {l:'Sharpe',        v:f.n2(s.sharpe),               c:clr(s.sharpe)},
+    {l:'Win Rate',      v:f.pct(s.win_rate),             c:''},
+    {l:'Profit Factor', v:f.n2(s.profit_factor),         c:clr((s.profit_factor||0)-1)},
+    {l:'Max Drawdown',  v:s.max_drawdown!=null?(s.max_drawdown*100).toFixed(1)+'%':'—', c:'neg'},
+    {l:'Exp. / ₹1L',   v:f.inr(s.expectancy_per_lakh), c:clr(s.expectancy_per_lakh)},
+    {l:'Avg Win',       v:f.inr(s.avg_win),              c:'pos'},
+    {l:'Total Trades',  v:String(s.total_trades??0),     c:''},
+  ];
+  $('bt-mgrid').innerHTML = cards.map(m=>`<div class="mcard"><div class="mlabel">${m.l}</div><div class="mval ${m.c}">${m.v}</div></div>`).join('');
+
+  // Equity curve
+  const eq = s.equity_curve || [];
+  if (eq.length > 2) renderBtChart(eq);
+  else $('bt-chart').innerHTML = '<div style="color:var(--muted);text-align:center;padding:32px 0">No trades</div>';
+
+  // Exit breakdown
+  const exits = s.exit_reasons || {};
+  const exitTotal = Object.values(exits).reduce((a,b)=>a+b,0);
+  const exitLabels = {sl:'Stop Loss',target:'Target',signal:'Signal',squareoff:'Squareoff',end_of_data:'End of Data'};
+  $('bt-exits').innerHTML = exitTotal
+    ? Object.entries(exits).sort(([,a],[,b])=>b-a).map(([k,n])=>`
+        <div class="bt-exit-pill">
+          <span class="bep-n">${n}</span>
+          <span class="bep-l">${exitLabels[k]||k} (${exitTotal?Math.round(n/exitTotal*100):0}%)</span>
+        </div>`).join('')
+    : '<span style="color:var(--muted);font-size:12px">No trades</span>';
+
+  // By symbol
+  const syms = Object.entries(perSym).filter(([,v])=>v&&(v.total_trades||0)>0).sort(([,a],[,b])=>(b.total_pnl||0)-(a.total_pnl||0));
+  $('bt-sym-grid').innerHTML = syms.length ? syms.map(([sym,ps])=>`
+    <div class="scard">
+      <div class="sym">${sym.replace('.NS','')}</div>
+      <div class="spnl ${clr(ps.total_pnl)}">${f.inr(ps.total_pnl)}</div>
+      <div class="smeta">${ps.total_trades||0} trades · ${f.pct(ps.win_rate)} WR</div>
+    </div>`).join('') : '<div style="color:var(--muted);font-size:12px">No per-symbol data</div>';
+
+  // Last 20 trades
+  const last20 = trades.slice(-20).reverse();
+  $('bt-trades').innerHTML = last20.length ? last20.map(t=>`
+    <tr>
+      <td>${f.ts(t.entry_time)}</td>
+      <td style="color:var(--text)">${(t.symbol||'').replace('.NS','')}</td>
+      <td>${t.entry_price!=null?Number(t.entry_price).toFixed(1):'—'}</td>
+      <td>${t.exit_price!=null?Number(t.exit_price).toFixed(1):'—'}</td>
+      <td>${t.qty??'—'}</td>
+      <td class="${clr(t.pnl)}">${f.inr(t.pnl)}</td>
+      <td style="color:var(--muted);font-size:11px">${t.exit_reason||'—'}</td>
+    </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px 0">No trades</td></tr>';
+}
+
+function renderBtChart(eq) {
+  $('bt-chart').innerHTML = '';
+  if (_btChart) { _btChart.destroy(); _btChart = null; }
+  const w  = $('bt-chart').clientWidth || 800;
+  const up = eq[eq.length-1] >= eq[0];
+  _btChart = new uPlot({
+    width:w, height:160,
+    cursor:{show:true,x:true,y:false}, legend:{show:false}, select:{show:false},
+    axes:[{show:false},{stroke:'#333',grid:{stroke:'#1a1a1a',width:1},ticks:{show:false},size:72,
+      values:(_,v)=>v.map(x=>x==null?'':'₹'+Math.round(x).toLocaleString('en-IN')),font:'11px DM Sans'}],
+    series:[{},{stroke:up?'#B8FF57':'#FF4D4D',width:1.8,fill:up?'rgba(184,255,87,.06)':'rgba(255,77,77,.06)'}],
+    scales:{x:{time:false}},
+  }, [Float64Array.from({length:eq.length},(_,i)=>i), Float64Array.from(eq)], $('bt-chart'));
+}
+
+$('bt-run').addEventListener('click', runBacktest);
+
+// Destroy chart on tab switch to avoid stale size
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.dataset.tab !== 'backtest' && _btChart) { _btChart.destroy(); _btChart = null; }
+    if (btn.dataset.tab === 'backtest') {
+      // Re-draw if results are visible and chart container was resized
+      const eq = window._btLastEq;
+      if (eq && $('bt-results').style.display !== 'none') renderBtChart(eq);
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Boot
 // ═══════════════════════════════════════════════════════════════════════════════
 loadLeaderboard();
 updateMarketBanner();   // set dot state on page load even before scanner tab opens
+initBacktest();         // set default dates on the backtest form
 </script>
 </body>
 </html>
