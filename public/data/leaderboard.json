@@ -1,5 +1,60 @@
 {
-  "leaderboard": [],
-  "generated_at": null,
-  "_note": "Run `python -m backtest.runner --strategy all` to populate."
+  "leaderboard": [
+    {
+      "strategy_key": "gap_fade",
+      "strategy_name": "Gap Fade",
+      "sharpe": 0.0,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "max_drawdown": 0.0,
+      "expectancy_per_lakh": 0.0,
+      "total_trades": 0,
+      "total_pnl": 0.0
+    },
+    {
+      "strategy_key": "supertrend_ema",
+      "strategy_name": "Supertrend + EMA",
+      "sharpe": -0.1389,
+      "win_rate": 0.3556,
+      "profit_factor": 0.9863,
+      "max_drawdown": -0.0221,
+      "expectancy_per_lakh": -2.03,
+      "total_trades": 90,
+      "total_pnl": -183.04
+    },
+    {
+      "strategy_key": "vwap_reversal",
+      "strategy_name": "VWAP Reversal",
+      "sharpe": -10.5405,
+      "win_rate": 0.1579,
+      "profit_factor": 0.4696,
+      "max_drawdown": -0.0828,
+      "expectancy_per_lakh": -268.46,
+      "total_trades": 19,
+      "total_pnl": -5100.68
+    },
+    {
+      "strategy_key": "rsi_divergence",
+      "strategy_name": "RSI Divergence",
+      "sharpe": -12.0619,
+      "win_rate": 0.35,
+      "profit_factor": 0.4333,
+      "max_drawdown": -0.1385,
+      "expectancy_per_lakh": -164.31,
+      "total_trades": 80,
+      "total_pnl": -13145.11
+    },
+    {
+      "strategy_key": "opening_range_breakout",
+      "strategy_name": "Opening Range Breakout",
+      "sharpe": -20.3762,
+      "win_rate": 0.451,
+      "profit_factor": 0.3738,
+      "max_drawdown": -0.0352,
+      "expectancy_per_lakh": -64.19,
+      "total_trades": 51,
+      "total_pnl": -3273.89
+    }
+  ],
+  "generated_at": "2026-05-20T23:28:03.185308+05:30"
 }

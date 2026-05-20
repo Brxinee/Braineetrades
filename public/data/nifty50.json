@@ -5,7 +5,7 @@
     { "symbol": "HDFCBANK.NS",    "name": "HDFC Bank",                 "sector": "Banking",         "lot_size": 550 },
     { "symbol": "BHARTIARTL.NS",  "name": "Bharti Airtel",             "sector": "Telecom",         "lot_size": 475 },
     { "symbol": "ICICIBANK.NS",   "name": "ICICI Bank",                "sector": "Banking",         "lot_size": 700 },
-    { "symbol": "INFOSYS.NS",     "name": "Infosys",                   "sector": "IT",              "lot_size": 300 },
+    { "symbol": "INFY.NS",        "name": "Infosys",                   "sector": "IT",              "lot_size": 300 },
     { "symbol": "SBIN.NS",        "name": "State Bank of India",       "sector": "Banking",         "lot_size": 1500 },
     { "symbol": "HINDUNILVR.NS",  "name": "Hindustan Unilever",        "sector": "FMCG",            "lot_size": 300 },
     { "symbol": "ITC.NS",         "name": "ITC",                       "sector": "FMCG",            "lot_size": 1600 },

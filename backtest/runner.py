@@ -3,22 +3,21 @@ CLI runner for backtests.
 
 Usage:
   python -m backtest.runner --strategy all
-  python -m backtest.runner --strategy vwap_reversal --start 2025-03-01 --end 2025-05-01
+  python -m backtest.runner --strategy vwap_reversal --days 30
   python -m backtest.runner --strategy opening_range_breakout --capital 500000
+  python -m backtest.runner --strategy all --quick   # 5 liquid symbols, 14 days
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytz
 
-# Ensure repo root is on path when run as __main__
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -29,8 +28,14 @@ IST = pytz.timezone("Asia/Kolkata")
 DATA_DIR = ROOT / "public" / "data"
 RESULTS_DIR = DATA_DIR / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-
 NIFTY50_JSON = DATA_DIR / "nifty50.json"
+
+# Liquid large-caps used in --quick mode (fast CI runs)
+QUICK_SYMBOLS = [
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS",
+    "INFY.NS", "SBIN.NS", "BHARTIARTL.NS", "LT.NS",
+    "BAJFINANCE.NS", "HCLTECH.NS",
+]
 
 
 def load_symbols() -> list[str]:
@@ -49,7 +54,10 @@ def run_and_save(
     StrategyClass = REGISTRY[strategy_key]
     strategy = StrategyClass()
     print(f"\n{'='*60}")
-    print(f"Running: {strategy.name} | {start} → {end} | {len(symbols)} symbols")
+    print(f"Strategy : {strategy.name}")
+    print(f"Period   : {start} → {end}")
+    print(f"Symbols  : {len(symbols)}")
+    print(f"Capital  : ₹{capital:,.0f}")
     print(f"{'='*60}")
 
     result = run_backtest(strategy, symbols, start, end, capital)
@@ -57,16 +65,14 @@ def run_and_save(
     out_path = RESULTS_DIR / f"{strategy_key}.json"
     with open(out_path, "w") as f:
         json.dump(result, f, indent=2, default=str)
-    print(f"\n[OK] Saved → {out_path}")
 
     s = result["summary"]
-    print(
-        f"  Trades: {s['total_trades']} | "
-        f"Win Rate: {s['win_rate']:.1%} | "
-        f"Sharpe: {s['sharpe']:.2f} | "
-        f"Max DD: {s['max_drawdown']:.1%} | "
-        f"P&L: ₹{s['total_pnl']:,.0f}"
-    )
+    print(f"\n  Saved   → {out_path.relative_to(ROOT)}")
+    print(f"  Trades  : {s['total_trades']}")
+    print(f"  Win rate: {s['win_rate']:.1%}")
+    print(f"  Sharpe  : {s['sharpe']:.2f}")
+    print(f"  Max DD  : {s['max_drawdown']:.1%}")
+    print(f"  P&L     : ₹{s['total_pnl']:,.0f}")
     return result
 
 
@@ -90,14 +96,11 @@ def build_leaderboard(results: dict[str, dict]) -> None:
     lb_path = DATA_DIR / "leaderboard.json"
     with open(lb_path, "w") as f:
         json.dump(
-            {
-                "leaderboard": board,
-                "generated_at": datetime.now(IST).isoformat(),
-            },
+            {"leaderboard": board, "generated_at": datetime.now(IST).isoformat()},
             f,
             indent=2,
         )
-    print(f"\n[OK] Leaderboard → {lb_path}")
+    print(f"\n  Leaderboard → {lb_path.relative_to(ROOT)}")
 
 
 def main():
@@ -108,36 +111,32 @@ def main():
         choices=list(REGISTRY.keys()) + ["all"],
         help="Strategy to run (default: all)",
     )
-    parser.add_argument(
-        "--start",
-        default=None,
-        help="Start date YYYY-MM-DD (default: 60 days ago)",
-    )
-    parser.add_argument(
-        "--end",
-        default=None,
-        help="End date YYYY-MM-DD (default: today)",
-    )
-    parser.add_argument(
-        "--capital",
-        type=float,
-        default=100_000.0,
-        help="Starting capital in INR (default: 100000)",
-    )
-    parser.add_argument(
-        "--symbols",
-        nargs="*",
-        default=None,
-        help="Override symbol list (space-separated .NS tickers)",
-    )
+    parser.add_argument("--days", type=int, default=60,
+                        help="Lookback days (max 60 for 5m via yfinance, default: 60)")
+    parser.add_argument("--start", default=None, help="Override start date YYYY-MM-DD")
+    parser.add_argument("--end", default=None, help="Override end date YYYY-MM-DD")
+    parser.add_argument("--capital", type=float, default=100_000.0,
+                        help="Starting capital INR (default: 100000)")
+    parser.add_argument("--symbols", nargs="*", default=None,
+                        help="Override symbol list (space-separated .NS tickers)")
+    parser.add_argument("--quick", action="store_true",
+                        help="Quick mode: 10 liquid symbols, 14 days (for CI)")
     args = parser.parse_args()
 
-    now_ist = datetime.now(IST)
-    end = args.end or now_ist.strftime("%Y-%m-%d")
-    start = args.start or (now_ist - timedelta(days=60)).strftime("%Y-%m-%d")
-    symbols = args.symbols or load_symbols()
+    now = datetime.now(IST)
+    if args.quick:
+        symbols = QUICK_SYMBOLS
+        days = 14
+    else:
+        symbols = args.symbols or load_symbols()
+        days = args.days
 
-    strategies_to_run = list(REGISTRY.keys()) if args.strategy == "all" else [args.strategy]
+    end = args.end or now.strftime("%Y-%m-%d")
+    start = args.start or (now - timedelta(days=days)).strftime("%Y-%m-%d")
+
+    strategies_to_run = (
+        list(REGISTRY.keys()) if args.strategy == "all" else [args.strategy]
+    )
 
     all_results: dict[str, dict] = {}
     for key in strategies_to_run:
@@ -145,7 +144,7 @@ def main():
         all_results[key] = result
 
     build_leaderboard(all_results)
-    print("\nDone.")
+    print("\nDone.\n")
 
 
 if __name__ == "__main__":
