@@ -10,8 +10,8 @@ The DataFrame passed in has these guaranteed columns (all lowercase):
 generate_signals must return a SignalResult with:
   entries  – boolean Series, True on the bar to ENTER long
   exits    – boolean Series, True on the bar to EXIT long
-  sl       – float Series, stop-loss price per bar (NaN where no signal)
-  target   – float Series, target price per bar (NaN where no signal)
+  sl       – float Series, stop-loss price per bar (NaN where no entry)
+  target   – float Series, target price per bar (NaN where no entry)
   signal_meta – dict with any extra info surfaced in the live scanner
 
 Position sizing, concurrent-position cap (max 3), and 3:15 PM IST square-off
@@ -22,16 +22,17 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 
 
 @dataclass
 class SignalResult:
-    entries: pd.Series          # bool, True = buy signal on that bar
-    exits: pd.Series            # bool, True = exit signal on that bar
-    sl: pd.Series               # float, stop-loss price
-    target: pd.Series           # float, target price
+    entries: pd.Series   # bool, True = buy signal on that bar
+    exits: pd.Series     # bool, True = exit signal on that bar
+    sl: pd.Series        # float, stop-loss price (NaN where no active signal)
+    target: pd.Series    # float, target price   (NaN where no active signal)
     signal_meta: dict = field(default_factory=dict)
 
     def __post_init__(self):
@@ -56,7 +57,6 @@ class Strategy(ABC):
     params: dict = {}
 
     def __init__(self, **kwargs):
-        # Merge default params with any runtime overrides
         self.cfg = {**self.__class__.params, **kwargs}
 
     @abstractmethod
@@ -73,26 +73,26 @@ class Strategy(ABC):
 
     @staticmethod
     def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-        """Average True Range."""
-        hl = df["high"] - df["low"]
-        hc = (df["high"] - df["close"].shift(1)).abs()
-        lc = (df["low"] - df["close"].shift(1)).abs()
-        tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
-        return tr.ewm(span=period, adjust=False).mean()
+        """Exponential ATR (Wilder's smoothing)."""
+        high, low, prev_close = df["high"], df["low"], df["close"].shift(1)
+        tr = pd.concat(
+            [high - low, (high - prev_close).abs(), (low - prev_close).abs()],
+            axis=1,
+        ).max(axis=1)
+        return tr.ewm(alpha=1 / period, adjust=False).mean()
 
     @staticmethod
     def vwap(df: pd.DataFrame) -> pd.Series:
         """
-        Intraday VWAP, reset each session day.
-        Requires datetime index with timezone info.
+        Intraday VWAP, reset at the start of each calendar day.
+        df.index must be tz-aware (Asia/Kolkata).
         """
-        df = df.copy()
-        df["_date"] = df.index.normalize()
-        df["_tp"] = (df["high"] + df["low"] + df["close"]) / 3
-        df["_tpv"] = df["_tp"] * df["volume"]
-        df["_cum_tpv"] = df.groupby("_date")["_tpv"].cumsum()
-        df["_cum_vol"] = df.groupby("_date")["volume"].cumsum()
-        return df["_cum_tpv"] / df["_cum_vol"]
+        tp = (df["high"] + df["low"] + df["close"]) / 3
+        tpv = tp * df["volume"]
+        date_key = df.index.normalize()
+        cum_tpv = tpv.groupby(date_key).cumsum()
+        cum_vol = df["volume"].groupby(date_key).cumsum()
+        return cum_tpv / cum_vol.replace(0, np.nan)
 
     @staticmethod
     def ema(series: pd.Series, period: int) -> pd.Series:
@@ -111,64 +111,81 @@ class Strategy(ABC):
         df: pd.DataFrame, period: int = 7, multiplier: float = 3.0
     ) -> tuple[pd.Series, pd.Series]:
         """
-        Returns (supertrend_line, direction) where direction=1 means bullish.
+        Vectorised Supertrend.
+        Returns (supertrend_line, direction) where direction == 1 is bullish,
+        direction == -1 is bearish.
         """
-        atr = Strategy.atr(df, period)
-        hl2 = (df["high"] + df["low"]) / 2
-        upper_band = hl2 + multiplier * atr
-        lower_band = hl2 - multiplier * atr
+        atr_vals = Strategy.atr(df, period).values
+        close = df["close"].values
+        hl2 = ((df["high"] + df["low"]) / 2).values
 
-        st = pd.Series(np.nan, index=df.index)
-        direction = pd.Series(1, index=df.index)
+        basic_ub = hl2 + multiplier * atr_vals
+        basic_lb = hl2 - multiplier * atr_vals
 
-        for i in range(1, len(df)):
-            prev_st = st.iloc[i - 1]
-            prev_dir = direction.iloc[i - 1]
-            close = df["close"].iloc[i]
-            prev_close = df["close"].iloc[i - 1]
+        n = len(df)
+        final_ub = basic_ub.copy()
+        final_lb = basic_lb.copy()
+        st = np.full(n, np.nan)
+        direction = np.ones(n, dtype=int)
 
-            # Lower band logic
-            lb = lower_band.iloc[i]
-            if lower_band.iloc[i - 1] > lb or prev_close < lower_band.iloc[i - 1]:
-                lb = lower_band.iloc[i]
+        for i in range(1, n):
+            # Final upper band: only tighten (pull down) — reset if price breaks above
+            if basic_ub[i] < final_ub[i - 1] or close[i - 1] > final_ub[i - 1]:
+                final_ub[i] = basic_ub[i]
             else:
-                lb = max(lb, lower_band.iloc[i - 1]) if not np.isnan(prev_st) else lb
+                final_ub[i] = final_ub[i - 1]
 
-            # Upper band logic
-            ub = upper_band.iloc[i]
-            if upper_band.iloc[i - 1] < ub or prev_close > upper_band.iloc[i - 1]:
-                ub = upper_band.iloc[i]
+            # Final lower band: only tighten (push up) — reset if price breaks below
+            if basic_lb[i] > final_lb[i - 1] or close[i - 1] < final_lb[i - 1]:
+                final_lb[i] = basic_lb[i]
             else:
-                ub = min(ub, upper_band.iloc[i - 1]) if not np.isnan(prev_st) else ub
+                final_lb[i] = final_lb[i - 1]
 
-            if np.isnan(prev_st):
-                st.iloc[i] = lb
-                direction.iloc[i] = 1
-            elif prev_st == upper_band.iloc[i - 1]:
-                if close <= ub:
-                    st.iloc[i] = ub
-                    direction.iloc[i] = -1
+            # Determine direction from prev supertrend
+            if np.isnan(st[i - 1]):
+                # Initialise
+                st[i] = final_lb[i]
+                direction[i] = 1
+            elif st[i - 1] == final_ub[i - 1]:
+                # Was bearish
+                if close[i] > final_ub[i]:
+                    st[i] = final_lb[i]
+                    direction[i] = 1
                 else:
-                    st.iloc[i] = lb
-                    direction.iloc[i] = 1
+                    st[i] = final_ub[i]
+                    direction[i] = -1
             else:
-                if close >= lb:
-                    st.iloc[i] = lb
-                    direction.iloc[i] = 1
+                # Was bullish
+                if close[i] < final_lb[i]:
+                    st[i] = final_ub[i]
+                    direction[i] = -1
                 else:
-                    st.iloc[i] = ub
-                    direction.iloc[i] = -1
+                    st[i] = final_lb[i]
+                    direction[i] = 1
 
-        return st, direction
+        return (
+            pd.Series(st, index=df.index),
+            pd.Series(direction, index=df.index),
+        )
+
+    @staticmethod
+    def swing_lows(series: pd.Series, window: int = 3) -> pd.Series:
+        """
+        Boolean mask: True where series[i] is the minimum of the surrounding window.
+        Useful for divergence detection.
+        """
+        rolled_min = series.rolling(2 * window + 1, center=True).min()
+        return series == rolled_min
 
     @staticmethod
     def squareoff_mask(df: pd.DataFrame) -> pd.Series:
         """
-        True on any bar at or after 15:15 IST — force exit.
-        Assumes df.index is tz-aware Asia/Kolkata.
+        True on any bar at or after 15:15 IST — strategy must exit.
         """
-        t = df.index.time
-        cutoff = pd.Timestamp("15:15").time()
+        import datetime
+        cutoff = datetime.time(15, 15)
         return pd.Series(
-            [x >= cutoff for x in t], index=df.index, dtype=bool
+            [t >= cutoff for t in df.index.time],
+            index=df.index,
+            dtype=bool,
         )
