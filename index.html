@@ -139,6 +139,19 @@ td:first-child{text-align:left}
 /* Toast */
 .toast{position:fixed;bottom:24px;right:24px;background:var(--bg2);border:1px solid var(--green);color:var(--text);font-size:13px;padding:12px 18px;border-radius:6px;z-index:500;opacity:0;transform:translateY(10px);transition:opacity .2s,transform .2s;pointer-events:none;max-width:320px}
 .toast.show{opacity:1;transform:translateY(0)}
+/* ── Journal ─────────────────────────────────────────────────────────────── */
+.jnl-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.jnl-export-btn{margin-left:auto;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;padding:6px 14px;border-radius:4px;transition:border-color .15s,color .15s;white-space:nowrap}
+.jnl-export-btn:hover{border-color:var(--green);color:var(--green)}
+.jnl-cancel-btn{background:none;border:1px solid var(--border);color:var(--muted);font-size:14px;padding:9px 20px;border-radius:6px;margin-left:10px;transition:color .15s,border-color .15s}
+.jnl-cancel-btn:hover{color:var(--text);border-color:var(--text)}
+.jnl-actions{display:flex;gap:4px;justify-content:flex-end}
+.jnl-del,.jnl-edit{background:none;border:none;font-size:13px;padding:3px 7px;border-radius:3px;cursor:pointer;transition:color .15s}
+.jnl-del{color:var(--muted)}.jnl-del:hover{color:var(--red)}
+.jnl-edit{color:var(--muted)}.jnl-edit:hover{color:var(--green)}
+.jnl-open{color:var(--muted);font-style:italic;font-size:11px}
+.jnl-empty{text-align:center;padding:56px 0;color:var(--muted)}
+.jnl-empty-h{font-family:var(--fh);font-size:30px;font-weight:900;color:var(--bg3);margin-bottom:8px;letter-spacing:.04em}
 /* ── Backtest Lab ────────────────────────────────────────────────────────── */
 .bt-form{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px 22px;margin-bottom:24px}
 .bt-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:12px}
@@ -314,10 +327,84 @@ td:first-child{text-align:left}
 
   <!-- ── TAB 4: JOURNAL ────────────────────────────────────────────────── -->
   <section class="pane" id="pane-journal">
-    <div class="empty">
-      <div class="empty-h">JOURNAL</div>
-      <div class="empty-s">Coming in Item 8 — localStorage trade log</div>
+    <div class="ptitle">JOURNAL</div>
+
+    <!-- Summary stats -->
+    <div class="mgrid" id="jnl-stats" style="margin-bottom:24px"></div>
+
+    <!-- Add / Edit form -->
+    <div class="bt-form" id="jnl-form-wrap">
+      <div class="sh" style="margin-top:0;margin-bottom:14px"><span id="jnl-form-title">Log Trade</span></div>
+      <input type="hidden" id="jnl-edit-id">
+      <div class="bt-fields">
+        <div class="bt-field">
+          <label class="bt-label" for="jnl-date">Date</label>
+          <input id="jnl-date" type="date" class="bt-input" autocomplete="off">
+        </div>
+        <div class="bt-field">
+          <label class="bt-label" for="jnl-symbol">Symbol</label>
+          <input id="jnl-symbol" type="text" class="bt-input" placeholder="RELIANCE" autocomplete="off">
+        </div>
+        <div class="bt-field">
+          <label class="bt-label" for="jnl-strategy">Strategy</label>
+          <select id="jnl-strategy" class="bt-input sc-select">
+            <option value="">— none —</option>
+            <option value="vwap_reversal">VWAP Reversal</option>
+            <option value="opening_range_breakout">ORB</option>
+            <option value="supertrend_ema">Supertrend + EMA</option>
+            <option value="rsi_divergence">RSI Divergence</option>
+            <option value="gap_fade">Gap Fade</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+        <div class="bt-field">
+          <label class="bt-label" for="jnl-qty">Qty</label>
+          <input id="jnl-qty" type="number" class="bt-input" placeholder="10" min="1" step="1" autocomplete="off">
+        </div>
+        <div class="bt-field">
+          <label class="bt-label" for="jnl-entry">Entry ₹</label>
+          <input id="jnl-entry" type="number" class="bt-input" placeholder="1234.55" step="0.05" autocomplete="off">
+        </div>
+        <div class="bt-field">
+          <label class="bt-label" for="jnl-exit">Exit ₹ <span class="dim" style="text-transform:none;letter-spacing:0;font-size:9px">optional</span></label>
+          <input id="jnl-exit" type="number" class="bt-input" placeholder="1250.00" step="0.05" autocomplete="off">
+        </div>
+        <div class="bt-field">
+          <label class="bt-label" for="jnl-sl">Stop Loss ₹</label>
+          <input id="jnl-sl" type="number" class="bt-input" placeholder="1210.00" step="0.05" autocomplete="off">
+        </div>
+        <div class="bt-field">
+          <label class="bt-label" for="jnl-target">Target ₹</label>
+          <input id="jnl-target" type="number" class="bt-input" placeholder="1270.00" step="0.05" autocomplete="off">
+        </div>
+      </div>
+      <div class="bt-sym-row">
+        <label class="bt-label" for="jnl-notes">Notes</label>
+        <input id="jnl-notes" type="text" class="bt-input" style="margin-top:5px" placeholder="Setup rationale, observations…" autocomplete="off">
+      </div>
+      <button class="sc-run-btn" id="jnl-save">+ ADD TRADE</button>
+      <button class="jnl-cancel-btn" id="jnl-cancel" style="display:none">Cancel</button>
     </div>
+
+    <!-- Filters + CSV export -->
+    <div class="jnl-filters">
+      <select id="jnl-filter-strat" class="bt-input sc-select" style="width:auto">
+        <option value="">All strategies</option>
+        <option value="vwap_reversal">VWAP Reversal</option>
+        <option value="opening_range_breakout">ORB</option>
+        <option value="supertrend_ema">Supertrend + EMA</option>
+        <option value="rsi_divergence">RSI Divergence</option>
+        <option value="gap_fade">Gap Fade</option>
+        <option value="manual">Manual</option>
+      </select>
+      <input id="jnl-filter-from" type="date" class="bt-input" style="width:auto" title="From date" autocomplete="off">
+      <span style="color:var(--muted);font-size:12px">to</span>
+      <input id="jnl-filter-to" type="date" class="bt-input" style="width:auto" title="To date" autocomplete="off">
+      <button class="jnl-export-btn" id="jnl-export">↓ CSV</button>
+    </div>
+
+    <!-- Trade table -->
+    <div id="jnl-table-wrap"></div>
   </section>
 
 </main>
@@ -382,12 +469,14 @@ document.querySelectorAll('.tab').forEach(btn => {
     btn.classList.add('active');
     $('pane-'+btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'scanner') onScannerOpen();
+    if (btn.dataset.tab === 'journal') onJournalOpen();
   });
 });
 
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id==='pane-'+name));
+  if (name === 'journal') onJournalOpen();
 }
 
 // ── Strategy display names ────────────────────────────────────────────────────
@@ -854,12 +943,11 @@ function renderBtChart(eq) {
 
 $('bt-run').addEventListener('click', runBacktest);
 
-// Destroy chart on tab switch to avoid stale size
+// Destroy backtest chart on tab switch to avoid stale canvas size
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => {
     if (btn.dataset.tab !== 'backtest' && _btChart) { _btChart.destroy(); _btChart = null; }
     if (btn.dataset.tab === 'backtest') {
-      // Re-draw if results are visible and chart container was resized
       const eq = window._btLastEq;
       if (eq && $('bt-results').style.display !== 'none') renderBtChart(eq);
     }
@@ -867,11 +955,201 @@ document.querySelectorAll('.tab').forEach(btn => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// TAB 4 — JOURNAL  (pure localStorage, no server)
+// ═══════════════════════════════════════════════════════════════════════════════
+const JNL_KEY     = 'brainee_journal';
+const PENDING_KEY = 'brainee_pending_trade';
+const STRAT_NAMES = {vwap_reversal:'VWAP',opening_range_breakout:'ORB',supertrend_ema:'ST+EMA',rsi_divergence:'RSI Div',gap_fade:'Gap Fade',manual:'Manual'};
+
+function jnlLoad()        { return JSON.parse(localStorage.getItem(JNL_KEY)||'[]'); }
+function jnlSave(trades)  { localStorage.setItem(JNL_KEY, JSON.stringify(trades)); }
+function jnlTodayStr()    { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function jnlPnl(t)        { return (t.exit!=null&&t.entry!=null) ? (t.exit-t.entry)*(t.qty||1) : null; }
+
+function onJournalOpen() {
+  const raw = localStorage.getItem(PENDING_KEY);
+  if (raw) {
+    localStorage.removeItem(PENDING_KEY);
+    try { jnlFillForm(JSON.parse(raw)); showToast('Pre-filled from scanner — add exit price when done'); }
+    catch {}
+  }
+  jnlRender();
+}
+
+function jnlFillForm(d) {
+  $('jnl-edit-id').value  = '';
+  $('jnl-form-title').textContent = 'Log Trade';
+  $('jnl-save').textContent = '+ ADD TRADE';
+  $('jnl-cancel').style.display = 'none';
+  $('jnl-date').value     = d.date     || jnlTodayStr();
+  $('jnl-symbol').value   = (d.symbol  || '').replace('.NS','').toUpperCase();
+  $('jnl-strategy').value = d.strategy || '';
+  $('jnl-qty').value      = d.qty      || '';
+  $('jnl-entry').value    = d.entry    || '';
+  $('jnl-exit').value     = d.exit     || '';
+  $('jnl-sl').value       = d.sl       || '';
+  $('jnl-target').value   = d.target   || '';
+  $('jnl-notes').value    = d.notes    || '';
+}
+
+function jnlClearForm() {
+  $('jnl-edit-id').value  = '';
+  $('jnl-form-title').textContent = 'Log Trade';
+  $('jnl-save').textContent = '+ ADD TRADE';
+  $('jnl-cancel').style.display = 'none';
+  ['jnl-symbol','jnl-qty','jnl-entry','jnl-exit','jnl-sl','jnl-target','jnl-notes'].forEach(id => $(id).value='');
+  $('jnl-date').value     = jnlTodayStr();
+  $('jnl-strategy').value = '';
+}
+
+function jnlAddOrUpdate() {
+  const editId  = $('jnl-edit-id').value;
+  const symbol  = $('jnl-symbol').value.trim().toUpperCase().replace('.NS','');
+  const entry   = parseFloat($('jnl-entry').value);
+  if (!symbol)              { showToast('Symbol is required.');          return; }
+  if (isNaN(entry)||entry<=0){ showToast('Valid entry price required.'); return; }
+
+  const num = id => { const v=parseFloat($(id).value); return ($(id).value===''||isNaN(v)) ? null : v; };
+  const trade = {
+    id:       editId ? Number(editId) : Date.now(),
+    date:     $('jnl-date').value || jnlTodayStr(),
+    symbol,
+    strategy: $('jnl-strategy').value,
+    qty:      parseInt($('jnl-qty').value) || 1,
+    entry,
+    exit:     num('jnl-exit'),
+    sl:       num('jnl-sl'),
+    target:   num('jnl-target'),
+    notes:    $('jnl-notes').value.trim(),
+  };
+
+  const trades = jnlLoad();
+  if (editId) {
+    const idx = trades.findIndex(t=>t.id===trade.id);
+    if (idx>=0) trades[idx]=trade; else trades.push(trade);
+    showToast('Trade updated.');
+  } else {
+    trades.push(trade);
+    showToast('Trade logged.');
+  }
+  jnlSave(trades);
+  jnlClearForm();
+  jnlRender();
+}
+
+function jnlDelete(id) {
+  if (!confirm('Delete this trade?')) return;
+  jnlSave(jnlLoad().filter(t=>t.id!==id));
+  jnlRender();
+}
+
+function jnlEditMode(trade) {
+  $('jnl-edit-id').value  = trade.id;
+  $('jnl-form-title').textContent = 'Edit Trade';
+  $('jnl-save').textContent = '✓ SAVE CHANGES';
+  $('jnl-cancel').style.display = '';
+  jnlFillForm(trade);
+  $('jnl-form-wrap').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function jnlFilteredTrades() {
+  const strat = $('jnl-filter-strat').value;
+  const from  = $('jnl-filter-from').value;
+  const to    = $('jnl-filter-to').value;
+  return jnlLoad().filter(t => {
+    if (strat && t.strategy !== strat) return false;
+    if (from  && t.date < from)        return false;
+    if (to    && t.date > to)          return false;
+    return true;
+  });
+}
+
+function jnlRender() {
+  const trades = jnlFilteredTrades();
+
+  // Summary cards (closed trades only)
+  const closed = trades.filter(t=>t.exit!=null);
+  const pnls   = closed.map(jnlPnl).filter(v=>v!=null);
+  const wins   = pnls.filter(p=>p>0);
+  const losses = pnls.filter(p=>p<=0);
+  const totalPnl = pnls.reduce((a,b)=>a+b,0);
+  const stats = [
+    {l:'Total P&L',  v:pnls.length?f.inr(totalPnl):'—',   c:pnls.length?clr(totalPnl):''},
+    {l:'Win Rate',   v:closed.length?f.pct(wins.length/closed.length):'—', c:''},
+    {l:'Avg Win',    v:wins.length?f.inr(wins.reduce((a,b)=>a+b,0)/wins.length):'—',   c:'pos'},
+    {l:'Avg Loss',   v:losses.length?f.inr(losses.reduce((a,b)=>a+b,0)/losses.length):'—', c:'neg'},
+  ];
+  $('jnl-stats').innerHTML = stats.map(m=>`<div class="mcard"><div class="mlabel">${m.l}</div><div class="mval ${m.c}">${m.v}</div></div>`).join('');
+
+  // Table
+  if (!trades.length) {
+    $('jnl-table-wrap').innerHTML = `<div class="jnl-empty"><div class="jnl-empty-h">NO TRADES YET</div><div>Log trades from the scanner, or fill the form above.</div></div>`;
+    return;
+  }
+
+  const rows = [...trades].reverse().map(t=>{
+    const pnl = jnlPnl(t);
+    const rr  = (t.sl&&t.target&&t.entry&&t.entry>t.sl) ? ((t.target-t.entry)/(t.entry-t.sl)).toFixed(2) : '—';
+    return `<tr>
+      <td>${t.date||'—'}</td>
+      <td style="color:var(--text);font-weight:500">${t.symbol||'—'}</td>
+      <td style="color:var(--muted);font-size:11px">${STRAT_NAMES[t.strategy]||t.strategy||'—'}</td>
+      <td>${t.entry!=null?'₹'+Number(t.entry).toFixed(1):'—'}</td>
+      <td>${t.exit!=null?'₹'+Number(t.exit).toFixed(1):'<span class="jnl-open">open</span>'}</td>
+      <td>${t.qty||'—'}</td>
+      <td class="${pnl!=null?clr(pnl):''}">${pnl!=null?f.inr(pnl):'—'}</td>
+      <td>${rr}</td>
+      <td style="color:var(--muted);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(t.notes||'').replace(/"/g,'&quot;')}">${t.notes||''}</td>
+      <td><div class="jnl-actions">
+        <button class="jnl-edit" data-id="${t.id}" title="Edit">✎</button>
+        <button class="jnl-del"  data-id="${t.id}" title="Delete">✕</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  $('jnl-table-wrap').innerHTML = `<div style="overflow-x:auto"><table class="tlog">
+    <thead><tr>
+      <th style="text-align:left">Date</th><th style="text-align:left">Symbol</th>
+      <th style="text-align:left">Strategy</th><th>Entry</th><th>Exit</th>
+      <th>Qty</th><th>P&amp;L</th><th>R:R</th>
+      <th style="text-align:left">Notes</th><th></th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+
+  $('jnl-table-wrap').querySelectorAll('.jnl-del').forEach(btn=>
+    btn.addEventListener('click',()=>jnlDelete(Number(btn.dataset.id))));
+  $('jnl-table-wrap').querySelectorAll('.jnl-edit').forEach(btn=>
+    btn.addEventListener('click',()=>{ const t=jnlLoad().find(t=>t.id===Number(btn.dataset.id)); if(t) jnlEditMode(t); }));
+}
+
+function jnlExportCSV() {
+  const trades = jnlFilteredTrades();
+  if (!trades.length) { showToast('No trades to export.'); return; }
+  const hdr = 'Date,Symbol,Strategy,Qty,Entry,Exit,SL,Target,P&L,R:R,Notes';
+  const rows = trades.map(t=>{
+    const pnl = jnlPnl(t);
+    const rr  = (t.sl&&t.target&&t.entry&&t.entry>t.sl)?((t.target-t.entry)/(t.entry-t.sl)).toFixed(2):'';
+    return [t.date,t.symbol,t.strategy||'',t.qty,t.entry,t.exit??'',t.sl??'',t.target??'',pnl!=null?pnl.toFixed(2):'',rr,`"${(t.notes||'').replace(/"/g,'""')}"`].join(',');
+  });
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent([hdr,...rows].join('\n'));
+  a.download=`brainee_journal_${jnlTodayStr()}.csv`;
+  a.click();
+}
+
+$('jnl-save').addEventListener('click', jnlAddOrUpdate);
+$('jnl-cancel').addEventListener('click', jnlClearForm);
+$('jnl-export').addEventListener('click', jnlExportCSV);
+['jnl-filter-strat','jnl-filter-from','jnl-filter-to'].forEach(id=>$(id).addEventListener('change',jnlRender));
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Boot
 // ═══════════════════════════════════════════════════════════════════════════════
 loadLeaderboard();
 updateMarketBanner();   // set dot state on page load even before scanner tab opens
 initBacktest();         // set default dates on the backtest form
+$('jnl-date').value = jnlTodayStr();
 </script>
 </body>
 </html>
