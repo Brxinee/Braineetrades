@@ -48,7 +48,7 @@ thead th{background:var(--bg2);color:var(--muted);font-size:10px;font-weight:500
 thead th:first-child{text-align:left}
 tbody tr{border-top:1px solid var(--border);cursor:pointer;transition:background .1s}
 tbody tr:hover{background:var(--bg2)}
-tbody tr.sel{background:rgba(184,255,87,.04);outline:none}
+tbody tr.sel{background:rgba(184,255,87,.04)}
 tbody tr.sel td:first-child{border-left:2px solid var(--green)}
 td{padding:13px 16px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;line-height:1.3}
 td:first-child{text-align:left}
@@ -99,6 +99,46 @@ td:first-child{text-align:left}
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:320px;gap:12px}
 .empty-h{font-family:var(--fh);font-size:56px;font-weight:900;color:var(--bg3);letter-spacing:.02em}
 .empty-s{color:var(--muted);font-size:13px}
+/* ── Scanner ─────────────────────────────────────────────────────────────── */
+.sc-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:22px}
+.sc-status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);min-width:130px}
+.sc-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .3s,box-shadow .3s}
+.sc-dot.open{background:var(--green);box-shadow:0 0 7px var(--green)}
+.sc-select{background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:var(--fb);font-size:13px;padding:8px 12px;border-radius:6px;outline:none;-webkit-appearance:none;appearance:none;padding-right:28px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234A4A4A'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+.sc-select:focus{border-color:var(--green)}
+.sc-run-btn{background:var(--green);color:#000;border:none;font-family:var(--fh);font-size:16px;font-weight:900;letter-spacing:.06em;padding:9px 26px;border-radius:6px;transition:opacity .15s,transform .1s;white-space:nowrap}
+.sc-run-btn:hover:not(:disabled){opacity:.88}
+.sc-run-btn:active:not(:disabled){transform:scale(.97)}
+.sc-run-btn:disabled{opacity:.4;cursor:not-allowed}
+.sc-info{font-size:11px;color:var(--muted);margin-left:auto;text-align:right;white-space:nowrap}
+/* Market closed banner */
+.sc-closed{text-align:center;padding:56px 20px;border:1px solid var(--border);border-radius:8px;margin-bottom:24px}
+.sc-closed-icon{font-size:36px;margin-bottom:14px;opacity:.4}
+.sc-closed-title{font-family:var(--fh);font-size:30px;font-weight:900;letter-spacing:.06em;color:var(--muted)}
+.sc-closed-sub{font-size:12px;color:var(--muted);margin-top:6px}
+/* Signal cards */
+.sig-grid{display:flex;flex-direction:column;gap:10px}
+.sig-card{background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--green);border-radius:8px;padding:16px 18px}
+.sig-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sig-sym{font-family:var(--fh);font-size:24px;font-weight:900;letter-spacing:.02em;line-height:1}
+.sig-meta{font-size:11px;color:var(--muted);margin-top:3px}
+.sig-ltp{text-align:right;flex-shrink:0}
+.sig-price{font-family:var(--fh);font-size:24px;font-weight:900;line-height:1}
+.sig-prices{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+.sig-p{background:var(--bg3);border-radius:5px;padding:9px 11px}
+.sig-p .lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
+.sig-p .val{font-family:var(--fh);font-size:19px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.sig-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+.sig-badge{font-family:var(--fh);font-size:11px;font-weight:900;letter-spacing:.08em;padding:3px 9px;border-radius:3px;background:rgba(184,255,87,.1);color:var(--green)}
+.sig-time{font-size:11px;color:var(--muted)}
+.log-btn{margin-left:auto;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;padding:4px 14px;border-radius:4px;transition:border-color .15s,color .15s}
+.log-btn:hover{border-color:var(--green);color:var(--green)}
+/* No signals */
+.no-sig{text-align:center;padding:56px 0;color:var(--muted)}
+.no-sig-h{font-family:var(--fh);font-size:30px;font-weight:900;color:var(--bg3);margin-bottom:8px;letter-spacing:.04em}
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--bg2);border:1px solid var(--green);color:var(--text);font-size:13px;padding:12px 18px;border-radius:6px;z-index:500;opacity:0;transform:translateY(10px);transition:opacity .2s,transform .2s;pointer-events:none;max-width:320px}
+.toast.show{opacity:1;transform:translateY(0)}
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media(max-width:640px){
   header{padding:0 14px;gap:12px}
@@ -108,6 +148,9 @@ td:first-child{text-align:left}
   .mgrid{grid-template-columns:repeat(2,1fr)}
   .drawer{padding:18px 16px 48px}
   .dtitle{font-size:28px}
+  .sc-info{display:none}
+  .sig-prices{grid-template-columns:repeat(2,1fr)}
+  .sig-sym,.sig-price{font-size:20px}
 }
 </style>
 </head>
@@ -149,10 +192,34 @@ td:first-child{text-align:left}
 
   <!-- ── TAB 2: LIVE SCANNER ───────────────────────────────────────────── -->
   <section class="pane" id="pane-scanner">
-    <div class="empty">
-      <div class="empty-h">SCANNER</div>
-      <div class="empty-s">Coming in Item 6 — live signals from /api/scan</div>
+    <div class="ptitle">LIVE SCANNER</div>
+
+    <!-- Controls bar -->
+    <div class="sc-bar">
+      <div class="sc-status">
+        <span class="sc-dot" id="sc-dot"></span>
+        <span id="sc-status-txt">Checking…</span>
+      </div>
+      <select id="sc-strategy" class="sc-select" aria-label="Strategy">
+        <option value="vwap_reversal">VWAP Reversal</option>
+        <option value="opening_range_breakout">Opening Range Breakout</option>
+        <option value="supertrend_ema" selected>Supertrend + EMA</option>
+        <option value="rsi_divergence">RSI Divergence</option>
+        <option value="gap_fade">Gap Fade</option>
+      </select>
+      <button class="sc-run-btn" id="sc-run">⬤ RUN SCAN</button>
+      <div class="sc-info" id="sc-info"></div>
     </div>
+
+    <!-- Market-closed banner (shown when market is closed) -->
+    <div id="sc-closed" class="sc-closed" style="display:none">
+      <div class="sc-closed-icon">◐</div>
+      <div class="sc-closed-title">MARKET CLOSED</div>
+      <div class="sc-closed-sub">NSE opens 09:15 IST · Mon – Fri<br>You can still run the scanner to see last-session signals.</div>
+    </div>
+
+    <!-- Signal results injected here -->
+    <div id="sc-results"></div>
   </section>
 
   <!-- ── TAB 3: BACKTEST LAB ───────────────────────────────────────────── -->
@@ -180,25 +247,17 @@ td:first-child{text-align:left}
   <div class="dtitle" id="dtitle">—</div>
   <div class="dsub"   id="dsub"></div>
   <div class="mgrid"  id="dmgrid"></div>
-
   <div class="sh">Equity Curve</div>
   <div id="dchart"></div>
-
   <div class="sh">By Symbol</div>
   <div class="sgrid" id="dsymbols"></div>
-
   <div class="sh">Last 20 Trades</div>
   <div style="overflow-x:auto">
     <table class="tlog">
       <thead>
         <tr>
-          <th>Date / Time</th>
-          <th>Symbol</th>
-          <th>Entry ₹</th>
-          <th>Exit ₹</th>
-          <th>Qty</th>
-          <th>P&amp;L</th>
-          <th>Exit</th>
+          <th>Date / Time</th><th>Symbol</th><th>Entry ₹</th>
+          <th>Exit ₹</th><th>Qty</th><th>P&amp;L</th><th>Exit</th>
         </tr>
       </thead>
       <tbody id="dtrades"></tbody>
@@ -206,23 +265,32 @@ td:first-child{text-align:left}
   </div>
 </aside>
 
-<!-- uPlot (40 KB, no jQuery, no React) -->
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- uPlot -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.min.css">
 <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.iife.min.js"></script>
 
 <script>
 'use strict';
-// ── Tiny helpers ─────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
-
 const f = {
   n2:  v => v == null ? '—' : Number(v).toFixed(2),
   pct: v => v == null ? '—' : (v * 100).toFixed(1) + '%',
-  inr: v => { if (v == null) return '—'; const s = Math.abs(v).toLocaleString('en-IN', {maximumFractionDigits:0}); return (v >= 0 ? '+₹' : '−₹') + s; },
-  ts:  v => { if (!v) return '—'; try { return new Date(v).toLocaleString('en-IN', {timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}); } catch { return v; } },
+  inr: v => { if (v == null) return '—'; const s = Math.abs(v).toLocaleString('en-IN',{maximumFractionDigits:0}); return (v>=0?'+₹':'−₹')+s; },
+  ts:  v => { if (!v) return '—'; try { return new Date(v).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}); } catch { return v; } },
+  price: v => v==null ? '—' : '₹'+Number(v).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}),
 };
-const cls = v => v > 0 ? 'pos' : v < 0 ? 'neg' : 'dim';
+const clr = v => v > 0 ? 'pos' : v < 0 ? 'neg' : 'dim';
+
+function showToast(msg, dur=3500) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
 
 // ── Tab routing ───────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(btn => {
@@ -230,11 +298,17 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
-    $('pane-' + btn.dataset.tab).classList.add('active');
+    $('pane-'+btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'scanner') onScannerOpen();
   });
 });
 
-// ── Strategy descriptions ─────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id==='pane-'+name));
+}
+
+// ── Strategy display names ────────────────────────────────────────────────────
 const DESC = {
   vwap_reversal:          'Fade >1% deviation from VWAP back to mean',
   opening_range_breakout: 'First 15-min range breakout with volume',
@@ -243,7 +317,9 @@ const DESC = {
   gap_fade:               'Fade 0.8–2% gap-down opens to prev close',
 };
 
-// ── Skeleton rows ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 1 — STRATEGIES leaderboard
+// ═══════════════════════════════════════════════════════════════════════════════
 function skeletonRows() {
   return Array(5).fill(0).map(() => `
     <tr>
@@ -252,19 +328,13 @@ function skeletonRows() {
     </tr>`).join('');
 }
 
-// ── Load leaderboard ──────────────────────────────────────────────────────────
 async function loadLeaderboard() {
   $('lb-body').innerHTML = skeletonRows();
   try {
-    const r = await fetch('/public/data/leaderboard.json?_=' + Date.now());
+    const r = await fetch('/public/data/leaderboard.json?_='+Date.now());
     if (!r.ok) throw new Error(r.status);
-    const { leaderboard = [], generated_at } = await r.json();
-
-    if (generated_at) {
-      $('lb-ts').textContent = 'Updated ' + f.ts(generated_at) + ' IST';
-    } else {
-      $('lb-ts').textContent = '';
-    }
+    const { leaderboard=[], generated_at } = await r.json();
+    $('lb-ts').textContent = generated_at ? 'Updated '+f.ts(generated_at)+' IST' : '';
 
     if (!leaderboard.length) {
       $('lb-body').innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:40px 0">
@@ -273,35 +343,31 @@ async function loadLeaderboard() {
       return;
     }
 
-    $('lb-body').innerHTML = leaderboard.map((s, i) => `
+    $('lb-body').innerHTML = leaderboard.map((s,i) => `
       <tr data-key="${s.strategy_key}">
         <td>
-          <div style="display:flex;align-items:flex-start;gap:0">
+          <div style="display:flex;align-items:flex-start">
             <span class="badge ${i===0?'no1':''}">${i+1}</span>
-            <div>
-              <span class="sname">${s.strategy_name}</span>
-              <span class="sdesc">${DESC[s.strategy_key]||''}</span>
-            </div>
+            <div><span class="sname">${s.strategy_name}</span><span class="sdesc">${DESC[s.strategy_key]||''}</span></div>
           </div>
         </td>
-        <td class="${cls(s.sharpe)}">${f.n2(s.sharpe)}</td>
+        <td class="${clr(s.sharpe)}">${f.n2(s.sharpe)}</td>
         <td>${f.pct(s.win_rate)}</td>
-        <td class="${cls((s.profit_factor||0)-1)}">${f.n2(s.profit_factor)}</td>
+        <td class="${clr((s.profit_factor||0)-1)}">${f.n2(s.profit_factor)}</td>
         <td class="neg">${s.max_drawdown!=null?(s.max_drawdown*100).toFixed(1)+'%':'—'}</td>
-        <td class="${cls(s.expectancy_per_lakh)}">${f.inr(s.expectancy_per_lakh)}</td>
+        <td class="${clr(s.expectancy_per_lakh)}">${f.inr(s.expectancy_per_lakh)}</td>
         <td class="dim">${s.total_trades??0}</td>
       </tr>`).join('');
 
     $('lb-body').querySelectorAll('tr[data-key]').forEach(row => {
-      row.addEventListener('click', () => openDrawer(row.dataset.key, row));
-      row.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' ') openDrawer(row.dataset.key, row); });
       row.tabIndex = 0;
+      const open = () => openDrawer(row.dataset.key, row);
+      row.addEventListener('click', open);
+      row.addEventListener('keydown', e => (e.key==='Enter'||e.key===' ') && open());
     });
-
-  } catch (e) {
+  } catch {
     $('lb-body').innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:40px 0">
-      Data unavailable — run the backtest runner to generate results.
-    </td></tr>`;
+      Data unavailable — run the backtest runner to generate results.</td></tr>`;
     $('lb-ts').textContent = '';
   }
 }
@@ -312,30 +378,20 @@ let _chart = null;
 function openDrawer(key, row) {
   document.querySelectorAll('#lb-body tr').forEach(r => r.classList.remove('sel'));
   row.classList.add('sel');
-
-  // Reset
   $('dtitle').textContent = row.querySelector('.sname').textContent;
   $('dsub').textContent   = 'Loading…';
-  $('dmgrid').innerHTML   = metricSkeleton();
-  $('dchart').innerHTML   = '';
-  $('dsymbols').innerHTML = '';
-  $('dtrades').innerHTML  = '';
-  if (_chart) { _chart.destroy(); _chart = null; }
-
-  $('overlay').classList.add('on');
-  $('drawer').classList.add('on');
-  document.body.style.overflow = 'hidden';
-  $('dclose').focus();
-
-  fetchStrategy(key);
-}
-
-function metricSkeleton() {
-  return Array(8).fill(0).map(() => `
+  $('dmgrid').innerHTML   = Array(8).fill(0).map(() => `
     <div class="mcard">
       <div class="mlabel"><span class="sk" style="width:54px"></span></div>
       <div class="mval"><span class="sk" style="width:72px;height:22px;display:block;margin-top:6px"></span></div>
     </div>`).join('');
+  $('dchart').innerHTML = $('dsymbols').innerHTML = $('dtrades').innerHTML = '';
+  if (_chart) { _chart.destroy(); _chart = null; }
+  $('overlay').classList.add('on');
+  $('drawer').classList.add('on');
+  document.body.style.overflow = 'hidden';
+  $('dclose').focus();
+  fetchStrategy(key);
 }
 
 function closeDrawer() {
@@ -348,118 +404,243 @@ function closeDrawer() {
 
 $('dclose').addEventListener('click', closeDrawer);
 $('overlay').addEventListener('click', closeDrawer);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+document.addEventListener('keydown', e => e.key==='Escape' && closeDrawer());
 
 async function fetchStrategy(key) {
   try {
-    const r = await fetch(`/public/data/results/${key}.json?_=` + Date.now());
+    const r = await fetch(`/public/data/results/${key}.json?_=`+Date.now());
     if (!r.ok) throw new Error(r.status);
     renderDrawer(await r.json());
   } catch {
-    $('dsub').textContent = 'Results unavailable for this strategy.';
-    $('dmgrid').innerHTML = '<div style="color:var(--muted);padding:12px;grid-column:1/-1">No data — run the backtest runner first.</div>';
+    $('dsub').textContent = 'Results unavailable.';
+    $('dmgrid').innerHTML = '<div style="color:var(--muted);padding:12px;grid-column:1/-1">Run the backtest runner first.</div>';
   }
 }
 
 function renderDrawer(data) {
-  const s      = data.summary   || {};
-  const trades = data.trades    || [];
-  const perSym = data.per_symbol|| {};
-
-  // Sub-header
-  const genAt = data.generated_at ? f.ts(data.generated_at) + ' IST' : '—';
-  $('dsub').textContent = `${data.start||'?'} → ${data.end||'?'} · ${data.symbols_run||0} symbols · ${genAt}`;
-
-  // Metrics grid (8 cards)
+  const s=data.summary||{}, trades=data.trades||[], perSym=data.per_symbol||{};
+  $('dsub').textContent = `${data.start||'?'} → ${data.end||'?'} · ${data.symbols_run||0} symbols · ${f.ts(data.generated_at)} IST`;
   const cards = [
-    { l:'Total P&L',      v: f.inr(s.total_pnl),           c: cls(s.total_pnl) },
-    { l:'Sharpe',         v: f.n2(s.sharpe),                c: cls(s.sharpe) },
-    { l:'Win Rate',       v: f.pct(s.win_rate),             c: '' },
-    { l:'Profit Factor',  v: f.n2(s.profit_factor),         c: cls((s.profit_factor||0)-1) },
-    { l:'Max Drawdown',   v: s.max_drawdown!=null?(s.max_drawdown*100).toFixed(1)+'%':'—', c:'neg' },
-    { l:'Exp. / ₹1L',    v: f.inr(s.expectancy_per_lakh),  c: cls(s.expectancy_per_lakh) },
-    { l:'Avg Win',        v: f.inr(s.avg_win),              c: 'pos' },
-    { l:'Avg Loss',       v: f.inr(s.avg_loss),             c: 'neg' },
+    {l:'Total P&L',     v:f.inr(s.total_pnl),          c:clr(s.total_pnl)},
+    {l:'Sharpe',        v:f.n2(s.sharpe),               c:clr(s.sharpe)},
+    {l:'Win Rate',      v:f.pct(s.win_rate),             c:''},
+    {l:'Profit Factor', v:f.n2(s.profit_factor),         c:clr((s.profit_factor||0)-1)},
+    {l:'Max Drawdown',  v:s.max_drawdown!=null?(s.max_drawdown*100).toFixed(1)+'%':'—', c:'neg'},
+    {l:'Exp. / ₹1L',   v:f.inr(s.expectancy_per_lakh), c:clr(s.expectancy_per_lakh)},
+    {l:'Avg Win',       v:f.inr(s.avg_win),              c:'pos'},
+    {l:'Avg Loss',      v:f.inr(s.avg_loss),             c:'neg'},
   ];
-  $('dmgrid').innerHTML = cards.map(m => `
-    <div class="mcard">
-      <div class="mlabel">${m.l}</div>
-      <div class="mval ${m.c}">${m.v}</div>
-    </div>`).join('');
+  $('dmgrid').innerHTML = cards.map(m=>`<div class="mcard"><div class="mlabel">${m.l}</div><div class="mval ${m.c}">${m.v}</div></div>`).join('');
+  const eq = s.equity_curve||[];
+  if (eq.length>2) renderEquityCurve(eq); else $('dchart').innerHTML='<div style="color:var(--muted);text-align:center;padding:32px 0">No trades</div>';
+  const syms = Object.entries(perSym).filter(([,v])=>v&&(v.total_trades||0)>0).sort(([,a],[,b])=>(b.total_pnl||0)-(a.total_pnl||0));
+  $('dsymbols').innerHTML = syms.length ? syms.map(([sym,ps])=>`
+    <div class="scard">
+      <div class="sym">${sym.replace('.NS','')}</div>
+      <div class="spnl ${clr(ps.total_pnl)}">${f.inr(ps.total_pnl)}</div>
+      <div class="smeta">${ps.total_trades||0} trades · ${f.pct(ps.win_rate)} WR</div>
+    </div>`).join('') : '<div style="color:var(--muted);font-size:12px">No per-symbol data</div>';
+  const last20 = trades.slice(-20).reverse();
+  $('dtrades').innerHTML = last20.length ? last20.map(t=>`
+    <tr>
+      <td>${f.ts(t.entry_time)}</td>
+      <td style="color:var(--text)">${(t.symbol||'').replace('.NS','')}</td>
+      <td>${t.entry_price!=null?Number(t.entry_price).toFixed(1):'—'}</td>
+      <td>${t.exit_price!=null?Number(t.exit_price).toFixed(1):'—'}</td>
+      <td>${t.qty??'—'}</td>
+      <td class="${clr(t.pnl)}">${f.inr(t.pnl)}</td>
+      <td style="color:var(--muted);font-size:11px">${t.exit_reason||'—'}</td>
+    </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px 0">No trades</td></tr>';
+}
 
-  // Equity curve
-  const eq = s.equity_curve || [];
-  if (eq.length > 2) {
-    renderChart(eq);
-  } else {
-    $('dchart').innerHTML = '<div style="color:var(--muted);text-align:center;padding:32px 0;font-size:13px">No trades — equity curve unavailable</div>';
+function renderEquityCurve(eq) {
+  $('dchart').innerHTML = '';
+  if (_chart) { _chart.destroy(); _chart = null; }
+  const w = $('dchart').clientWidth || 620;
+  const up = eq[eq.length-1] >= eq[0];
+  _chart = new uPlot({
+    width:w, height:158,
+    cursor:{show:true,x:true,y:false}, legend:{show:false}, select:{show:false},
+    axes:[{show:false},{stroke:'#333',grid:{stroke:'#1a1a1a',width:1},ticks:{show:false},size:72,
+      values:(_,v)=>v.map(x=>x==null?'':'₹'+Math.round(x).toLocaleString('en-IN')),font:'11px DM Sans'}],
+    series:[{},{stroke:up?'#B8FF57':'#FF4D4D',width:1.8,fill:up?'rgba(184,255,87,.06)':'rgba(255,77,77,.06)'}],
+    scales:{x:{time:false}},
+  }, [Float64Array.from({length:eq.length},(_,i)=>i), Float64Array.from(eq)], $('dchart'));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB 2 — LIVE SCANNER
+// ═══════════════════════════════════════════════════════════════════════════════
+function isMarketOpen() {
+  const ist = new Date(new Date().toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
+  const day = ist.getDay();
+  if (day===0||day===6) return false;
+  const mins = ist.getHours()*60 + ist.getMinutes();
+  return mins >= 9*60+15 && mins <= 15*60+30;
+}
+
+let _scanRunning = false;
+let _refreshInterval = null;
+let _countdownInterval = null;
+let _countdown = 60;
+
+function updateMarketBanner() {
+  const open = isMarketOpen();
+  $('sc-dot').classList.toggle('open', open);
+  $('sc-status-txt').textContent = open ? 'Market Open' : 'Market Closed';
+  $('sc-closed').style.display   = open ? 'none' : 'block';
+}
+
+function onScannerOpen() {
+  updateMarketBanner();
+}
+
+async function runScan() {
+  if (_scanRunning) return;
+  _scanRunning = true;
+  clearAutoRefresh();
+
+  const btn      = $('sc-run');
+  const strategy = $('sc-strategy').value;
+  btn.disabled   = true;
+  btn.textContent= 'SCANNING…';
+  $('sc-info').textContent = '';
+  $('sc-results').innerHTML = scanSkeleton();
+
+  try {
+    const r = await fetch('/api/scan', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({strategy}),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(()=>({detail:'Scan failed'}));
+      throw new Error(err.detail || r.status);
+    }
+    const data = await r.json();
+    updateMarketBanner();
+    renderSignals(data, strategy);
+    if (isMarketOpen()) startAutoRefresh(strategy);
+  } catch(e) {
+    $('sc-results').innerHTML = `<div class="no-sig"><div class="no-sig-h">ERROR</div><div style="font-size:12px;margin-top:4px">${e.message}</div></div>`;
+    $('sc-info').textContent = 'Scan failed';
+  } finally {
+    _scanRunning = false;
+    btn.disabled   = false;
+    btn.textContent= '⬤ RUN SCAN';
+  }
+}
+
+function scanSkeleton() {
+  return '<div class="sig-grid">'+Array(3).fill(0).map(()=>`
+    <div class="sig-card">
+      <div class="sig-top">
+        <div><span class="sk" style="width:100px;height:20px;display:block"></span><span class="sk" style="width:150px;height:12px;display:block;margin-top:6px"></span></div>
+        <div><span class="sk" style="width:80px;height:20px;display:block"></span></div>
+      </div>
+      <div class="sig-prices">${Array(4).fill('<div class="sig-p"><span class="sk" style="width:60px;height:15px;display:block;margin-top:4px"></span></div>').join('')}</div>
+    </div>`).join('')+'</div>';
+}
+
+function renderSignals(data, strategyKey) {
+  const sigs   = data.signals || [];
+  const scAt   = data.scanned_at ? f.ts(data.scanned_at)+' IST' : '';
+  const count  = sigs.length;
+  $('sc-info').textContent = count ? `${count} signal${count!==1?'s':''} · ${scAt}` : `No signals · ${scAt}`;
+
+  if (!count) {
+    $('sc-results').innerHTML = `<div class="no-sig">
+      <div class="no-sig-h">NO SIGNALS</div>
+      <div>${isMarketOpen()?'No setups right now. Auto-refreshing in 60s.':'No active signals from last session.'}</div>
+    </div>`;
+    return;
   }
 
-  // Per-symbol cards (sorted by P&L desc, skip empty)
-  const symEntries = Object.entries(perSym)
-    .filter(([, v]) => v && (v.total_trades||0) > 0)
-    .sort(([,a],[,b]) => (b.total_pnl||0) - (a.total_pnl||0));
+  $('sc-results').innerHTML = '<div class="sig-grid">'+sigs.map(s=>signalCard(s, data.strategy||strategyKey)).join('')+'</div>';
 
-  $('dsymbols').innerHTML = symEntries.length
-    ? symEntries.map(([sym, ps]) => `
-        <div class="scard">
-          <div class="sym">${sym.replace('.NS','')}</div>
-          <div class="spnl ${cls(ps.total_pnl)}">${f.inr(ps.total_pnl)}</div>
-          <div class="smeta">${ps.total_trades||0} trades · ${f.pct(ps.win_rate)} WR</div>
-        </div>`).join('')
-    : '<div style="color:var(--muted);font-size:12px">No per-symbol data</div>';
-
-  // Last 20 trades (newest first)
-  const last20 = trades.slice(-20).reverse();
-  $('dtrades').innerHTML = last20.length
-    ? last20.map(t => `
-        <tr>
-          <td>${f.ts(t.entry_time)}</td>
-          <td style="color:var(--text)">${(t.symbol||'').replace('.NS','')}</td>
-          <td>${t.entry_price!=null?Number(t.entry_price).toFixed(1):'—'}</td>
-          <td>${t.exit_price!=null?Number(t.exit_price).toFixed(1):'—'}</td>
-          <td>${t.qty??'—'}</td>
-          <td class="${cls(t.pnl)}">${f.inr(t.pnl)}</td>
-          <td style="color:var(--muted);font-size:11px">${t.exit_reason||'—'}</td>
-        </tr>`).join('')
-    : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px 0">No trades</td></tr>';
+  document.querySelectorAll('.log-btn[data-sig]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      try { logTrade(JSON.parse(btn.dataset.sig)); } catch{}
+    });
+  });
 }
 
-// ── uPlot equity curve ────────────────────────────────────────────────────────
-function renderChart(equity) {
-  const wrap = $('dchart');
-  wrap.innerHTML = '';
-  const w = wrap.clientWidth || 620;
-  const up = equity[equity.length - 1] >= equity[0];
-  const lc = up ? '#B8FF57' : '#FF4D4D';
-  const fc = up ? 'rgba(184,255,87,.06)' : 'rgba(255,77,77,.06)';
-  const xs = Float64Array.from({length: equity.length}, (_,i) => i);
-  const ys = Float64Array.from(equity);
-  const opts = {
-    width: w, height: 158,
-    cursor: { show: true, x: true, y: false, lock: false },
-    legend: { show: false },
-    select: { show: false },
-    axes: [
-      { show: false },
-      {
-        stroke: '#333', grid: { stroke: '#1a1a1a', width: 1 },
-        ticks: { show: false }, size: 72,
-        values: (_, vals) => vals.map(v => v==null?'':'₹'+Math.round(v).toLocaleString('en-IN')),
-        font: '11px DM Sans',
-      },
-    ],
-    series: [
-      {},
-      { stroke: lc, width: 1.8, fill: fc },
-    ],
-    scales: { x: { time: false } },
+function signalCard(s, stratName) {
+  const rr    = s.rr!=null ? Number(s.rr).toFixed(2) : '—';
+  const rrCls = s.rr!=null && s.rr>=1 ? 'pos' : '';
+  const ago   = s.bars_ago!=null ? `· ${s.bars_ago} bar${s.bars_ago!==1?'s':''} ago` : '';
+  const sigEnc= JSON.stringify(s).replace(/"/g,'&quot;');
+  return `
+  <div class="sig-card">
+    <div class="sig-top">
+      <div>
+        <div class="sig-sym">${(s.symbol||'').replace('.NS','')}</div>
+        <div class="sig-meta">${s.name||''} · ${s.sector||''}</div>
+      </div>
+      <div class="sig-ltp">
+        <div class="sig-price">${f.price(s.ltp)}</div>
+      </div>
+    </div>
+    <div class="sig-prices">
+      <div class="sig-p"><div class="lbl">Entry</div><div class="val">${s.entry!=null?'₹'+Number(s.entry).toFixed(1):'—'}</div></div>
+      <div class="sig-p"><div class="lbl">Stop Loss</div><div class="val neg">${s.sl!=null?'₹'+Number(s.sl).toFixed(1):'—'}</div></div>
+      <div class="sig-p"><div class="lbl">Target</div><div class="val pos">${s.target!=null?'₹'+Number(s.target).toFixed(1):'—'}</div></div>
+      <div class="sig-p"><div class="lbl">R : R</div><div class="val ${rrCls}">${rr}</div></div>
+    </div>
+    <div class="sig-foot">
+      <span class="sig-badge">LONG · ${stratName}</span>
+      <span class="sig-time">${f.ts(s.signal_time)} IST ${ago}</span>
+      <button class="log-btn" data-sig="${sigEnc}">+ Log Trade</button>
+    </div>
+  </div>`;
+}
+
+function startAutoRefresh(strategy) {
+  clearAutoRefresh();
+  _countdown = 60;
+  _countdownInterval = setInterval(() => {
+    _countdown--;
+    if (isMarketOpen() && _countdown > 0) {
+      $('sc-info').textContent && ($('sc-info').textContent = $('sc-info').textContent.replace(/Auto.*/,'') + ` · Auto in ${_countdown}s`);
+    }
+    if (_countdown <= 0) {
+      clearInterval(_countdownInterval);
+      if (isMarketOpen()) runScan();
+    }
+  }, 1000);
+}
+
+function clearAutoRefresh() {
+  clearInterval(_refreshInterval);
+  clearInterval(_countdownInterval);
+}
+
+// ── Log Trade → pre-fills Journal ────────────────────────────────────────────
+function logTrade(sig) {
+  const draft = {
+    date:     (sig.signal_time||new Date().toISOString()).slice(0,10),
+    symbol:   (sig.symbol||'').replace('.NS',''),
+    strategy: sig.indicator || '',
+    entry:    sig.entry  != null ? String(sig.entry)  : '',
+    sl:       sig.sl     != null ? String(sig.sl)     : '',
+    target:   sig.target != null ? String(sig.target) : '',
+    rr:       sig.rr     != null ? String(sig.rr)     : '',
+    notes:    `Signal: ${sig.signal_type||'LONG'} · R:R ${sig.rr!=null?sig.rr:'—'} · ${sig.indicator||''}`,
+    _source:  'scanner',
   };
-  _chart = new uPlot(opts, [xs, ys], wrap);
+  localStorage.setItem('brainee_pending_trade', JSON.stringify(draft));
+  switchTab('journal');
+  showToast(`${(sig.symbol||'').replace('.NS','')} logged — fill exit details in Journal`);
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
+// ── Wire scanner button ───────────────────────────────────────────────────────
+$('sc-run').addEventListener('click', runScan);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Boot
+// ═══════════════════════════════════════════════════════════════════════════════
 loadLeaderboard();
+updateMarketBanner();   // set dot state on page load even before scanner tab opens
 </script>
 </body>
 </html>
