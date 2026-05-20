@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Nifty 50 intraday trading research — strategy backtests, live signals, trade journal.">
+<title>Brainee Trades</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@900&family=DM+Sans:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+/* ── Variables ───────────────────────────────────────────────────────────── */
+:root {
+  --bg:     #080808;
+  --bg2:    #111;
+  --bg3:    #181818;
+  --green:  #B8FF57;
+  --red:    #FF4D4D;
+  --text:   #E2E2E2;
+  --muted:  #4A4A4A;
+  --border: #1E1E1E;
+  --fh:     'Barlow Condensed', sans-serif;
+  --fb:     'DM Sans', sans-serif;
+}
+/* ── Reset ───────────────────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--fb);font-size:14px;min-height:100vh;-webkit-font-smoothing:antialiased}
+button{cursor:pointer;font-family:inherit}
+/* ── Header ──────────────────────────────────────────────────────────────── */
+header{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:24px;padding:0 24px;height:52px}
+.logo{font-family:var(--fh);font-size:20px;color:var(--green);letter-spacing:.05em;white-space:nowrap;flex-shrink:0}
+nav{display:flex;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+nav::-webkit-scrollbar{display:none}
+.tab{background:none;border:none;color:var(--muted);font-family:var(--fh);font-size:14px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;padding:7px 14px;border-radius:4px;transition:color .15s,background .15s;white-space:nowrap}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--green);background:rgba(184,255,87,.08)}
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+main{max-width:1160px;margin:0 auto;padding:28px 24px 60px}
+.pane{display:none}.pane.active{display:block}
+/* ── Page title ──────────────────────────────────────────────────────────── */
+.ptitle{font-family:var(--fh);font-size:48px;font-weight:900;color:var(--green);letter-spacing:.02em;line-height:1;margin-bottom:4px}
+.psub{color:var(--muted);font-size:12px;margin-bottom:24px}
+/* ── Table ───────────────────────────────────────────────────────────────── */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
+table{width:100%;border-collapse:collapse}
+thead th{background:var(--bg2);color:var(--muted);font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;padding:10px 16px;text-align:right;white-space:nowrap}
+thead th:first-child{text-align:left}
+tbody tr{border-top:1px solid var(--border);cursor:pointer;transition:background .1s}
+tbody tr:hover{background:var(--bg2)}
+tbody tr.sel{background:rgba(184,255,87,.04);outline:none}
+tbody tr.sel td:first-child{border-left:2px solid var(--green)}
+td{padding:13px 16px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;line-height:1.3}
+td:first-child{text-align:left}
+.sname{font-family:var(--fh);font-size:18px;font-weight:900;letter-spacing:.03em;display:block}
+.sdesc{font-size:11px;color:var(--muted);margin-top:2px}
+.badge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;font-size:10px;background:var(--bg3);color:var(--muted);margin-right:6px;flex-shrink:0}
+.badge.no1{background:var(--green);color:#000}
+/* ── Skeleton ────────────────────────────────────────────────────────────── */
+@keyframes sk{0%{background-position:-600px 0}100%{background-position:600px 0}}
+.sk{background:linear-gradient(90deg,var(--bg2) 25%,var(--bg3) 50%,var(--bg2) 75%);background-size:1200px 100%;animation:sk 1.5s infinite;border-radius:3px;display:inline-block}
+/* ── Colors ──────────────────────────────────────────────────────────────── */
+.pos{color:var(--green)}.neg{color:var(--red)}.dim{color:var(--muted)}
+/* ── Drawer ──────────────────────────────────────────────────────────────── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200}
+.overlay.on{display:block}
+.drawer{position:fixed;top:0;right:-720px;width:min(720px,100vw);height:100vh;background:var(--bg2);border-left:1px solid var(--border);z-index:201;overflow-y:auto;transition:right .28s cubic-bezier(.4,0,.2,1);padding:24px 28px 48px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.drawer.on{right:0}
+.drawer::-webkit-scrollbar{width:4px}
+.drawer::-webkit-scrollbar-thumb{background:var(--border)}
+.dclose{float:right;background:none;border:1px solid var(--border);color:var(--muted);padding:3px 10px;border-radius:4px;font-size:16px;line-height:1.4;transition:color .15s}
+.dclose:hover{color:var(--text)}
+.dtitle{font-family:var(--fh);font-size:36px;font-weight:900;color:var(--green);letter-spacing:.02em;clear:right;margin-bottom:2px}
+.dsub{font-size:11px;color:var(--muted);margin-bottom:20px}
+/* ── Metric cards ────────────────────────────────────────────────────────── */
+.mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:24px}
+.mcard{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:12px 14px}
+.mlabel{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.mval{font-family:var(--fh);font-size:28px;font-weight:900;line-height:1}
+/* ── Section heading ─────────────────────────────────────────────────────── */
+.sh{font-family:var(--fh);font-size:12px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:24px 0 10px;display:flex;align-items:center;gap:8px}
+.sh::after{content:'';flex:1;height:1px;background:var(--border)}
+/* ── Chart container ─────────────────────────────────────────────────────── */
+#dchart{min-height:160px;border-radius:6px;overflow:hidden}
+.uplot .u-legend{display:none}
+/* ── Symbol grid ─────────────────────────────────────────────────────────── */
+.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.scard{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 12px}
+.scard .sym{font-family:var(--fh);font-size:14px;font-weight:900}
+.scard .spnl{font-size:13px;margin-top:4px;font-variant-numeric:tabular-nums}
+.scard .smeta{font-size:10px;color:var(--muted);margin-top:2px}
+/* ── Trade log ───────────────────────────────────────────────────────────── */
+.tlog{width:100%;border-collapse:collapse;font-size:12px}
+.tlog th{color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap}
+.tlog th:first-child{text-align:left}
+.tlog td{padding:7px 10px;text-align:right;border-bottom:1px solid rgba(30,30,30,.6);font-variant-numeric:tabular-nums}
+.tlog td:first-child{text-align:left;color:var(--muted)}
+/* ── Empty / coming soon ─────────────────────────────────────────────────── */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:320px;gap:12px}
+.empty-h{font-family:var(--fh);font-size:56px;font-weight:900;color:var(--bg3);letter-spacing:.02em}
+.empty-s{color:var(--muted);font-size:13px}
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media(max-width:640px){
+  header{padding:0 14px;gap:12px}
+  .tab{font-size:12px;padding:6px 10px}
+  main{padding:18px 14px 60px}
+  .ptitle{font-size:32px}
+  .mgrid{grid-template-columns:repeat(2,1fr)}
+  .drawer{padding:18px 16px 48px}
+  .dtitle{font-size:28px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">BRAINEE TRADES</div>
+  <nav>
+    <button class="tab active" data-tab="strategies">Strategies</button>
+    <button class="tab" data-tab="scanner">Live Scanner</button>
+    <button class="tab" data-tab="backtest">Backtest Lab</button>
+    <button class="tab" data-tab="journal">Journal</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ── TAB 1: STRATEGIES ──────────────────────────────────────────────── -->
+  <section class="pane active" id="pane-strategies">
+    <div class="ptitle">STRATEGIES</div>
+    <div class="psub" id="lb-ts">Loading…</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Strategy</th>
+            <th>Sharpe</th>
+            <th>Win Rate</th>
+            <th>Prof. Factor</th>
+            <th>Max DD</th>
+            <th>Exp. / ₹1L</th>
+            <th>Trades</th>
+          </tr>
+        </thead>
+        <tbody id="lb-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── TAB 2: LIVE SCANNER ───────────────────────────────────────────── -->
+  <section class="pane" id="pane-scanner">
+    <div class="empty">
+      <div class="empty-h">SCANNER</div>
+      <div class="empty-s">Coming in Item 6 — live signals from /api/scan</div>
+    </div>
+  </section>
+
+  <!-- ── TAB 3: BACKTEST LAB ───────────────────────────────────────────── -->
+  <section class="pane" id="pane-backtest">
+    <div class="empty">
+      <div class="empty-h">BACKTEST LAB</div>
+      <div class="empty-s">Coming in Item 7 — interactive backtester via /api/backtest</div>
+    </div>
+  </section>
+
+  <!-- ── TAB 4: JOURNAL ────────────────────────────────────────────────── -->
+  <section class="pane" id="pane-journal">
+    <div class="empty">
+      <div class="empty-h">JOURNAL</div>
+      <div class="empty-s">Coming in Item 8 — localStorage trade log</div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ── DRAWER ────────────────────────────────────────────────────────────── -->
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true">
+  <button class="dclose" id="dclose" aria-label="Close">✕</button>
+  <div class="dtitle" id="dtitle">—</div>
+  <div class="dsub"   id="dsub"></div>
+  <div class="mgrid"  id="dmgrid"></div>
+
+  <div class="sh">Equity Curve</div>
+  <div id="dchart"></div>
+
+  <div class="sh">By Symbol</div>
+  <div class="sgrid" id="dsymbols"></div>
+
+  <div class="sh">Last 20 Trades</div>
+  <div style="overflow-x:auto">
+    <table class="tlog">
+      <thead>
+        <tr>
+          <th>Date / Time</th>
+          <th>Symbol</th>
+          <th>Entry ₹</th>
+          <th>Exit ₹</th>
+          <th>Qty</th>
+          <th>P&amp;L</th>
+          <th>Exit</th>
+        </tr>
+      </thead>
+      <tbody id="dtrades"></tbody>
+    </table>
+  </div>
+</aside>
+
+<!-- uPlot (40 KB, no jQuery, no React) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.min.css">
+<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.iife.min.js"></script>
+
+<script>
+'use strict';
+// ── Tiny helpers ─────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
+
+const f = {
+  n2:  v => v == null ? '—' : Number(v).toFixed(2),
+  pct: v => v == null ? '—' : (v * 100).toFixed(1) + '%',
+  inr: v => { if (v == null) return '—'; const s = Math.abs(v).toLocaleString('en-IN', {maximumFractionDigits:0}); return (v >= 0 ? '+₹' : '−₹') + s; },
+  ts:  v => { if (!v) return '—'; try { return new Date(v).toLocaleString('en-IN', {timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}); } catch { return v; } },
+};
+const cls = v => v > 0 ? 'pos' : v < 0 ? 'neg' : 'dim';
+
+// ── Tab routing ───────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    $('pane-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ── Strategy descriptions ─────────────────────────────────────────────────────
+const DESC = {
+  vwap_reversal:          'Fade >1% deviation from VWAP back to mean',
+  opening_range_breakout: 'First 15-min range breakout with volume',
+  supertrend_ema:         'Supertrend bullish flip above EMA(20)',
+  rsi_divergence:         'Bullish divergence: price LL + RSI HL',
+  gap_fade:               'Fade 0.8–2% gap-down opens to prev close',
+};
+
+// ── Skeleton rows ─────────────────────────────────────────────────────────────
+function skeletonRows() {
+  return Array(5).fill(0).map(() => `
+    <tr>
+      <td><span class="sk" style="width:160px;height:16px"></span></td>
+      ${Array(6).fill('<td><span class="sk" style="width:48px;height:13px"></span></td>').join('')}
+    </tr>`).join('');
+}
+
+// ── Load leaderboard ──────────────────────────────────────────────────────────
+async function loadLeaderboard() {
+  $('lb-body').innerHTML = skeletonRows();
+  try {
+    const r = await fetch('/public/data/leaderboard.json?_=' + Date.now());
+    if (!r.ok) throw new Error(r.status);
+    const { leaderboard = [], generated_at } = await r.json();
+
+    if (generated_at) {
+      $('lb-ts').textContent = 'Updated ' + f.ts(generated_at) + ' IST';
+    } else {
+      $('lb-ts').textContent = '';
+    }
+
+    if (!leaderboard.length) {
+      $('lb-body').innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:40px 0">
+        No results yet — run <code style="color:var(--green)">python -m backtest.runner --strategy all</code>
+      </td></tr>`;
+      return;
+    }
+
+    $('lb-body').innerHTML = leaderboard.map((s, i) => `
+      <tr data-key="${s.strategy_key}">
+        <td>
+          <div style="display:flex;align-items:flex-start;gap:0">
+            <span class="badge ${i===0?'no1':''}">${i+1}</span>
+            <div>
+              <span class="sname">${s.strategy_name}</span>
+              <span class="sdesc">${DESC[s.strategy_key]||''}</span>
+            </div>
+          </div>
+        </td>
+        <td class="${cls(s.sharpe)}">${f.n2(s.sharpe)}</td>
+        <td>${f.pct(s.win_rate)}</td>
+        <td class="${cls((s.profit_factor||0)-1)}">${f.n2(s.profit_factor)}</td>
+        <td class="neg">${s.max_drawdown!=null?(s.max_drawdown*100).toFixed(1)+'%':'—'}</td>
+        <td class="${cls(s.expectancy_per_lakh)}">${f.inr(s.expectancy_per_lakh)}</td>
+        <td class="dim">${s.total_trades??0}</td>
+      </tr>`).join('');
+
+    $('lb-body').querySelectorAll('tr[data-key]').forEach(row => {
+      row.addEventListener('click', () => openDrawer(row.dataset.key, row));
+      row.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' ') openDrawer(row.dataset.key, row); });
+      row.tabIndex = 0;
+    });
+
+  } catch (e) {
+    $('lb-body').innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:40px 0">
+      Data unavailable — run the backtest runner to generate results.
+    </td></tr>`;
+    $('lb-ts').textContent = '';
+  }
+}
+
+// ── Drawer ────────────────────────────────────────────────────────────────────
+let _chart = null;
+
+function openDrawer(key, row) {
+  document.querySelectorAll('#lb-body tr').forEach(r => r.classList.remove('sel'));
+  row.classList.add('sel');
+
+  // Reset
+  $('dtitle').textContent = row.querySelector('.sname').textContent;
+  $('dsub').textContent   = 'Loading…';
+  $('dmgrid').innerHTML   = metricSkeleton();
+  $('dchart').innerHTML   = '';
+  $('dsymbols').innerHTML = '';
+  $('dtrades').innerHTML  = '';
+  if (_chart) { _chart.destroy(); _chart = null; }
+
+  $('overlay').classList.add('on');
+  $('drawer').classList.add('on');
+  document.body.style.overflow = 'hidden';
+  $('dclose').focus();
+
+  fetchStrategy(key);
+}
+
+function metricSkeleton() {
+  return Array(8).fill(0).map(() => `
+    <div class="mcard">
+      <div class="mlabel"><span class="sk" style="width:54px"></span></div>
+      <div class="mval"><span class="sk" style="width:72px;height:22px;display:block;margin-top:6px"></span></div>
+    </div>`).join('');
+}
+
+function closeDrawer() {
+  $('overlay').classList.remove('on');
+  $('drawer').classList.remove('on');
+  document.body.style.overflow = '';
+  document.querySelectorAll('#lb-body tr').forEach(r => r.classList.remove('sel'));
+  if (_chart) { _chart.destroy(); _chart = null; }
+}
+
+$('dclose').addEventListener('click', closeDrawer);
+$('overlay').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+async function fetchStrategy(key) {
+  try {
+    const r = await fetch(`/public/data/results/${key}.json?_=` + Date.now());
+    if (!r.ok) throw new Error(r.status);
+    renderDrawer(await r.json());
+  } catch {
+    $('dsub').textContent = 'Results unavailable for this strategy.';
+    $('dmgrid').innerHTML = '<div style="color:var(--muted);padding:12px;grid-column:1/-1">No data — run the backtest runner first.</div>';
+  }
+}
+
+function renderDrawer(data) {
+  const s      = data.summary   || {};
+  const trades = data.trades    || [];
+  const perSym = data.per_symbol|| {};
+
+  // Sub-header
+  const genAt = data.generated_at ? f.ts(data.generated_at) + ' IST' : '—';
+  $('dsub').textContent = `${data.start||'?'} → ${data.end||'?'} · ${data.symbols_run||0} symbols · ${genAt}`;
+
+  // Metrics grid (8 cards)
+  const cards = [
+    { l:'Total P&L',      v: f.inr(s.total_pnl),           c: cls(s.total_pnl) },
+    { l:'Sharpe',         v: f.n2(s.sharpe),                c: cls(s.sharpe) },
+    { l:'Win Rate',       v: f.pct(s.win_rate),             c: '' },
+    { l:'Profit Factor',  v: f.n2(s.profit_factor),         c: cls((s.profit_factor||0)-1) },
+    { l:'Max Drawdown',   v: s.max_drawdown!=null?(s.max_drawdown*100).toFixed(1)+'%':'—', c:'neg' },
+    { l:'Exp. / ₹1L',    v: f.inr(s.expectancy_per_lakh),  c: cls(s.expectancy_per_lakh) },
+    { l:'Avg Win',        v: f.inr(s.avg_win),              c: 'pos' },
+    { l:'Avg Loss',       v: f.inr(s.avg_loss),             c: 'neg' },
+  ];
+  $('dmgrid').innerHTML = cards.map(m => `
+    <div class="mcard">
+      <div class="mlabel">${m.l}</div>
+      <div class="mval ${m.c}">${m.v}</div>
+    </div>`).join('');
+
+  // Equity curve
+  const eq = s.equity_curve || [];
+  if (eq.length > 2) {
+    renderChart(eq);
+  } else {
+    $('dchart').innerHTML = '<div style="color:var(--muted);text-align:center;padding:32px 0;font-size:13px">No trades — equity curve unavailable</div>';
+  }
+
+  // Per-symbol cards (sorted by P&L desc, skip empty)
+  const symEntries = Object.entries(perSym)
+    .filter(([, v]) => v && (v.total_trades||0) > 0)
+    .sort(([,a],[,b]) => (b.total_pnl||0) - (a.total_pnl||0));
+
+  $('dsymbols').innerHTML = symEntries.length
+    ? symEntries.map(([sym, ps]) => `
+        <div class="scard">
+          <div class="sym">${sym.replace('.NS','')}</div>
+          <div class="spnl ${cls(ps.total_pnl)}">${f.inr(ps.total_pnl)}</div>
+          <div class="smeta">${ps.total_trades||0} trades · ${f.pct(ps.win_rate)} WR</div>
+        </div>`).join('')
+    : '<div style="color:var(--muted);font-size:12px">No per-symbol data</div>';
+
+  // Last 20 trades (newest first)
+  const last20 = trades.slice(-20).reverse();
+  $('dtrades').innerHTML = last20.length
+    ? last20.map(t => `
+        <tr>
+          <td>${f.ts(t.entry_time)}</td>
+          <td style="color:var(--text)">${(t.symbol||'').replace('.NS','')}</td>
+          <td>${t.entry_price!=null?Number(t.entry_price).toFixed(1):'—'}</td>
+          <td>${t.exit_price!=null?Number(t.exit_price).toFixed(1):'—'}</td>
+          <td>${t.qty??'—'}</td>
+          <td class="${cls(t.pnl)}">${f.inr(t.pnl)}</td>
+          <td style="color:var(--muted);font-size:11px">${t.exit_reason||'—'}</td>
+        </tr>`).join('')
+    : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px 0">No trades</td></tr>';
+}
+
+// ── uPlot equity curve ────────────────────────────────────────────────────────
+function renderChart(equity) {
+  const wrap = $('dchart');
+  wrap.innerHTML = '';
+  const w = wrap.clientWidth || 620;
+  const up = equity[equity.length - 1] >= equity[0];
+  const lc = up ? '#B8FF57' : '#FF4D4D';
+  const fc = up ? 'rgba(184,255,87,.06)' : 'rgba(255,77,77,.06)';
+  const xs = Float64Array.from({length: equity.length}, (_,i) => i);
+  const ys = Float64Array.from(equity);
+  const opts = {
+    width: w, height: 158,
+    cursor: { show: true, x: true, y: false, lock: false },
+    legend: { show: false },
+    select: { show: false },
+    axes: [
+      { show: false },
+      {
+        stroke: '#333', grid: { stroke: '#1a1a1a', width: 1 },
+        ticks: { show: false }, size: 72,
+        values: (_, vals) => vals.map(v => v==null?'':'₹'+Math.round(v).toLocaleString('en-IN')),
+        font: '11px DM Sans',
+      },
+    ],
+    series: [
+      {},
+      { stroke: lc, width: 1.8, fill: fc },
+    ],
+    scales: { x: { time: false } },
+  };
+  _chart = new uPlot(opts, [xs, ys], wrap);
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+loadLeaderboard();
+</script>
+</body>
+</html>
