@@ -1,1 +1,44 @@
-{"strategy": null, "summary": {}, "trades": [], "generated_at": null, "_note": "Run backtest runner to populate."}
+{
+  "strategy": "Gap Fade",
+  "strategy_key": "gap_fade",
+  "params": {
+    "gap_min_pct": 0.008,
+    "gap_max_pct": 0.02,
+    "sl_gap_mult": 1.5
+  },
+  "start": "2026-05-06",
+  "end": "2026-05-20",
+  "capital": 100000.0,
+  "symbols_run": 10,
+  "symbols_failed": [],
+  "summary": {
+    "total_trades": 0,
+    "win_rate": 0.0,
+    "avg_win": 0.0,
+    "avg_loss": 0.0,
+    "profit_factor": 0.0,
+    "expectancy": 0.0,
+    "expectancy_per_lakh": 0.0,
+    "sharpe": 0.0,
+    "max_drawdown": 0.0,
+    "total_pnl": 0.0,
+    "gross_profit": 0.0,
+    "gross_loss": 0.0,
+    "equity_curve": [],
+    "exit_reasons": {}
+  },
+  "per_symbol": {
+    "RELIANCE.NS": {},
+    "TCS.NS": {},
+    "HDFCBANK.NS": {},
+    "ICICIBANK.NS": {},
+    "INFY.NS": {},
+    "SBIN.NS": {},
+    "BHARTIARTL.NS": {},
+    "LT.NS": {},
+    "BAJFINANCE.NS": {},
+    "HCLTECH.NS": {}
+  },
+  "trades": [],
+  "generated_at": "2026-05-20T23:28:03.184688+05:30"
+}
