@@ -1,0 +1,8 @@
+data/
+reports/
+output/
+__pycache__/
+*.pyc
+*.parquet
+*.feather
+.env
