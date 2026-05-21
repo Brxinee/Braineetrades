@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>BRAINEE TRADES — Execution Cockpit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;900&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TOP BAR (fixed)
+═══════════════════════════════════════════════════════════════ -->
+<header class="topbar" role="banner">
+  <div class="topbar-left">
+    <a href="#dashboard" class="logo" aria-label="BRAINEE TRADES — Home">
+      <span class="logo-main">BRAINEE</span><span class="logo-sub">TRADES</span>
+    </a>
+  </div>
+
+  <div class="topbar-center" aria-live="polite" aria-label="Market status and NIFTY price">
+    <span id="market-status-dot" class="market-dot market-dot--closed" aria-hidden="true"></span>
+    <span id="market-status-label" class="market-status-label">MARKET CLOSED</span>
+    <span class="divider" aria-hidden="true">|</span>
+    <span class="topbar-index">NIFTY</span>
+    <span id="nifty-ltp" class="topbar-price">—</span>
+    <span id="nifty-chg" class="topbar-change">—</span>
+    <span class="divider hidden-mobile" aria-hidden="true">|</span>
+    <span id="topbar-timestamp" class="topbar-ts hidden-mobile">—</span>
+  </div>
+
+  <div class="topbar-right">
+    <span id="regime-badge" class="regime-badge" title="Current market regime">—</span>
+    <span class="topbar-vix hidden-mobile">VIX: <strong id="topbar-vix-val">—</strong></span>
+    <nav class="desktop-nav" aria-label="Primary navigation">
+      <a href="#dashboard"    class="nav-link" data-screen="dashboard">Dashboard</a>
+      <a href="#scanner"      class="nav-link" data-screen="scanner">Scanner</a>
+      <a href="#options"      class="nav-link" data-screen="options">Options</a>
+      <a href="#risk"         class="nav-link" data-screen="risk">Risk</a>
+      <a href="#journal"      class="nav-link" data-screen="journal">Journal</a>
+      <a href="#analytics"    class="nav-link" data-screen="analytics">Analytics</a>
+      <a href="#settings"     class="nav-link" data-screen="settings">Settings</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MAIN CONTENT AREA
+═══════════════════════════════════════════════════════════════ -->
+<main id="app" class="app-main" role="main">
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 1 — DASHBOARD (Command Center)
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-dashboard" class="screen screen--active" aria-label="Command Center Dashboard">
+
+    <!-- Metric tiles row -->
+    <div class="metrics-row">
+      <article class="metric-tile" aria-label="NIFTY 50 live price">
+        <div class="metric-tile__label">NIFTY 50</div>
+        <div class="metric-tile__value" id="dash-nifty-ltp">—</div>
+        <div class="metric-tile__sub" id="dash-nifty-chg">—</div>
+      </article>
+      <article class="metric-tile" aria-label="BANKNIFTY live price">
+        <div class="metric-tile__label">BANKNIFTY</div>
+        <div class="metric-tile__value" id="dash-bnf-ltp">—</div>
+        <div class="metric-tile__sub" id="dash-bnf-chg">—</div>
+      </article>
+      <article class="metric-tile metric-tile--vix" aria-label="India VIX">
+        <div class="metric-tile__label">INDIA VIX</div>
+        <div class="metric-tile__value" id="dash-vix">—</div>
+        <div class="metric-tile__sub" id="dash-vix-regime">—</div>
+      </article>
+      <article class="metric-tile" aria-label="Market breadth score">
+        <div class="metric-tile__label">BREADTH</div>
+        <div class="metric-tile__value" id="dash-breadth">—</div>
+        <div class="metric-tile__sub" id="dash-adv-dec">A/D —/—</div>
+      </article>
+    </div>
+
+    <!-- Regime panel -->
+    <div class="regime-panel" aria-label="Current regime analysis">
+      <div class="regime-panel__main">
+        <div class="regime-panel__label">CURRENT REGIME</div>
+        <div id="regime-name" class="regime-panel__name">LOADING…</div>
+        <div class="regime-panel__row">
+          <div class="regime-badge-lg" id="regime-gate-badge">GATE: —</div>
+          <div class="regime-badge-lg regime-badge-lg--vix" id="regime-vix-badge">VIX: —</div>
+          <div class="regime-badge-lg regime-badge-lg--gap" id="regime-gap-badge">GAP: —</div>
+        </div>
+      </div>
+      <div class="regime-panel__strategies">
+        <div class="regime-panel__strat-label">COMPATIBLE STRATEGIES</div>
+        <ul id="regime-strategies" class="strategy-list" aria-label="Compatible strategies for current regime">
+          <li class="strategy-list__item strategy-list__item--loading">Loading regime data…</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Live Signals -->
+    <div class="section-header">
+      <h2 class="section-title">LIVE SIGNALS</h2>
+      <span id="signals-last-scan" class="section-meta">Last scan: —</span>
+    </div>
+    <div id="dash-signals-grid" class="signals-grid" aria-label="Live signals">
+      <div class="empty-state">
+        <div class="empty-state__icon" aria-hidden="true">⚡</div>
+        <div class="empty-state__text">No signals active. Run scanner to detect setups.</div>
+        <a href="#scanner" class="btn btn-accent">Open Scanner</a>
+      </div>
+    </div>
+
+    <!-- Market Internals -->
+    <div class="section-header">
+      <h2 class="section-title">MARKET INTERNALS</h2>
+    </div>
+    <div class="internals-panel">
+      <div class="adv-dec-bar-wrap" aria-label="Advance/Decline bar">
+        <span class="adv-dec-bar__label">ADV <span id="adv-count">—</span></span>
+        <div class="adv-dec-bar" role="progressbar" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100">
+          <div id="adv-bar-fill" class="adv-dec-bar__fill" style="width:50%"></div>
+        </div>
+        <span class="adv-dec-bar__label">DEC <span id="dec-count">—</span></span>
+      </div>
+      <div class="sector-table-wrap">
+        <table class="data-table" aria-label="Sector strength table">
+          <thead>
+            <tr><th>Sector</th><th>Chg%</th><th>Strength</th></tr>
+          </thead>
+          <tbody id="sector-strength-tbody">
+            <tr><td colspan="3" class="table-loading">Loading sector data…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Quick Actions (sticky) -->
+    <div class="quick-actions" role="group" aria-label="Quick actions">
+      <a href="#scanner" class="btn btn-accent">⚡ Scan Now</a>
+      <a href="#risk"    class="btn btn-secondary">📐 Calculate Risk</a>
+      <a href="#journal" class="btn btn-secondary">📓 Log Trade</a>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 2 — SCANNER (Live Signal Scanner)
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-scanner" class="screen" aria-label="Live Signal Scanner">
+    <div class="screen-header">
+      <h1 class="screen-title">LIVE SCANNER</h1>
+    </div>
+
+    <div class="scanner-controls">
+      <div class="form-group">
+        <label class="form-label" for="scanner-strategy">Strategy</label>
+        <select id="scanner-strategy" class="form-select" aria-label="Select strategy to scan">
+          <option value="orb">Opening Range Breakout (ORB)</option>
+          <option value="vwap_reclaim">VWAP Reclaim / Rejection</option>
+          <option value="ema_cross">EMA Crossover (9/21)</option>
+          <option value="gap_fade">Gap Fade</option>
+          <option value="momentum_burst">Momentum Burst</option>
+          <option value="inside_bar">Inside Bar Breakout</option>
+          <option value="reversal_hammer">Reversal Hammer / Shooting Star</option>
+        </select>
+      </div>
+      <div id="scanner-strategy-desc" class="strategy-desc" aria-live="polite">
+        Select a strategy to see its description and entry logic.
+      </div>
+    </div>
+
+    <div class="scanner-actions" role="group" aria-label="Scanner controls">
+      <button id="scan-now-btn" class="btn btn-accent" aria-label="Run scanner now">
+        <span class="btn-icon" aria-hidden="true">⚡</span> Scan Now
+      </button>
+      <label class="toggle-label" for="auto-refresh-toggle">
+        <input type="checkbox" id="auto-refresh-toggle" role="switch" aria-checked="false">
+        <span class="toggle-text">Auto-refresh 30s</span>
+      </label>
+      <span id="scanner-last-scan" class="section-meta" aria-live="polite">Last scan: —</span>
+    </div>
+
+    <div id="regime-compat-warning" class="compat-warning" role="alert" style="display:none">
+      <span aria-hidden="true">⚠️</span>
+      <span id="regime-compat-text">This strategy may be incompatible with the current regime.</span>
+    </div>
+
+    <div id="scanner-signals-grid" class="signals-grid" aria-label="Scanner results">
+      <div class="empty-state">
+        <div class="empty-state__icon" aria-hidden="true">🔍</div>
+        <div class="empty-state__text">Press Scan Now to detect live setups.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 3 — SIGNALS HISTORY
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-signals" class="screen" aria-label="All Signals History">
+    <div class="screen-header">
+      <h1 class="screen-title">SIGNAL HISTORY</h1>
+    </div>
+
+    <div class="filter-bar" role="search" aria-label="Filter signals">
+      <select id="sig-filter-strategy" class="form-select form-select--sm" aria-label="Filter by strategy">
+        <option value="">All Strategies</option>
+        <option value="orb">ORB</option>
+        <option value="vwap_reclaim">VWAP Reclaim</option>
+        <option value="ema_cross">EMA Cross</option>
+        <option value="gap_fade">Gap Fade</option>
+        <option value="momentum_burst">Momentum Burst</option>
+      </select>
+      <select id="sig-filter-dir" class="form-select form-select--sm" aria-label="Filter by direction">
+        <option value="">All Directions</option>
+        <option value="LONG">LONG (CE)</option>
+        <option value="SHORT">SHORT (PE)</option>
+      </select>
+      <div class="form-group form-group--inline">
+        <label class="form-label" for="sig-filter-conf">Min Confidence</label>
+        <input type="number" id="sig-filter-conf" class="form-input form-input--sm" value="50" min="0" max="100" step="5" aria-label="Minimum confidence threshold (0–100)">
+        <span class="input-suffix">%</span>
+      </div>
+      <button id="sig-filter-apply" class="btn btn-secondary btn-sm" aria-label="Apply filters">Apply</button>
+    </div>
+
+    <div id="signals-list" class="signals-list" aria-label="Signal history list">
+      <div class="empty-state">
+        <div class="empty-state__icon" aria-hidden="true">📡</div>
+        <div class="empty-state__text">No signals in history yet. Run the scanner to generate signals.</div>
+      </div>
+    </div>
+
+    <div class="pagination" id="signals-pagination" aria-label="Signal pagination" role="navigation"></div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 4 — STRATEGY LAB
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-strategy-lab" class="screen" aria-label="Strategy Lab">
+    <div class="screen-header">
+      <h1 class="screen-title">STRATEGY LAB</h1>
+    </div>
+
+    <div class="strategy-lab-layout">
+      <aside class="strategy-lab__sidebar" aria-label="Strategy selector">
+        <ul class="strategy-nav" role="list">
+          <li><button class="strategy-nav__btn strategy-nav__btn--active" data-strat="orb">Opening Range Breakout</button></li>
+          <li><button class="strategy-nav__btn" data-strat="vwap_reclaim">VWAP Reclaim/Rejection</button></li>
+          <li><button class="strategy-nav__btn" data-strat="ema_cross">EMA Crossover 9/21</button></li>
+          <li><button class="strategy-nav__btn" data-strat="gap_fade">Gap Fade</button></li>
+          <li><button class="strategy-nav__btn" data-strat="momentum_burst">Momentum Burst</button></li>
+          <li><button class="strategy-nav__btn" data-strat="inside_bar">Inside Bar Breakout</button></li>
+          <li><button class="strategy-nav__btn" data-strat="reversal_hammer">Reversal Hammer</button></li>
+        </ul>
+      </aside>
+      <div class="strategy-lab__detail" id="strategy-detail-panel" aria-live="polite">
+        <div class="strat-detail__header">
+          <h2 id="strat-name" class="strat-detail__name">Opening Range Breakout (ORB)</h2>
+          <span id="strat-regime-tag" class="regime-badge">TRENDING BULL</span>
+        </div>
+        <div class="strat-detail__section">
+          <h3 class="strat-detail__subhead">Entry Logic</h3>
+          <ul id="strat-entry-rules" class="rules-list" aria-label="Entry rules">
+            <li>Identify the high/low of the first 15-minute candle (09:15–09:30)</li>
+            <li>Enter LONG on breakout above ORB high with volume > 1.5× 20-period avg</li>
+            <li>Enter SHORT on breakdown below ORB low with volume confirmation</li>
+            <li>VIX must be &lt; 18 (low volatility preferred)</li>
+          </ul>
+        </div>
+        <div class="strat-detail__section">
+          <h3 class="strat-detail__subhead">Exit Rules</h3>
+          <ul id="strat-exit-rules" class="rules-list" aria-label="Exit rules">
+            <li>Initial stop: opposite side of ORB range</li>
+            <li>Trail stop to 50% of ORB range once 1R achieved</li>
+            <li>Time-based exit: square off by 13:00 if target not hit</li>
+            <li>Force exit at 15:15 (EOD square-off)</li>
+          </ul>
+        </div>
+        <div class="strat-detail__section">
+          <h3 class="strat-detail__subhead">Best Conditions</h3>
+          <div id="strat-conditions" class="conditions-grid">
+            <div class="condition-chip condition-chip--good">VIX 12–18</div>
+            <div class="condition-chip condition-chip--good">Strong Gap Up/Down</div>
+            <div class="condition-chip condition-chip--good">Trending Market</div>
+            <div class="condition-chip condition-chip--bad">Avoid on Budget/RBI days</div>
+            <div class="condition-chip condition-chip--bad">Avoid in Choppy Regime</div>
+          </div>
+        </div>
+        <div class="strat-detail__section">
+          <h3 class="strat-detail__subhead">Backtest Summary (5Y)</h3>
+          <div id="strat-perf" class="strat-perf-grid">
+            <div class="strat-perf__item"><span class="label">Win Rate</span><span class="value value--pos" id="strat-win-rate">57%</span></div>
+            <div class="strat-perf__item"><span class="label">Avg RR</span><span class="value" id="strat-rr">1.8</span></div>
+            <div class="strat-perf__item"><span class="label">Profit Factor</span><span class="value" id="strat-pf">2.1</span></div>
+            <div class="strat-perf__item"><span class="label">Max DD</span><span class="value value--neg" id="strat-dd">-14%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 5 — BACKTEST LAB
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-backtest" class="screen" aria-label="Backtest Lab">
+    <div class="screen-header">
+      <h1 class="screen-title">BACKTEST LAB</h1>
+    </div>
+
+    <form id="backtest-form" class="backtest-form" aria-label="Backtest configuration">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="bt-strategy">Strategy</label>
+          <select id="bt-strategy" class="form-select" aria-label="Select strategy for backtest">
+            <option value="orb">Opening Range Breakout</option>
+            <option value="vwap_reclaim">VWAP Reclaim/Rejection</option>
+            <option value="ema_cross">EMA Crossover 9/21</option>
+            <option value="gap_fade">Gap Fade</option>
+            <option value="momentum_burst">Momentum Burst</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bt-start">Start Date</label>
+          <input type="date" id="bt-start" class="form-input" aria-label="Backtest start date">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bt-end">End Date</label>
+          <input type="date" id="bt-end" class="form-input" aria-label="Backtest end date">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bt-capital">Capital (₹)</label>
+          <input type="number" id="bt-capital" class="form-input" value="500000" min="10000" step="10000" aria-label="Starting capital in rupees">
+        </div>
+      </div>
+      <button type="submit" id="bt-run-btn" class="btn btn-accent" aria-label="Run backtest">
+        <span id="bt-run-label">▶ Run Backtest</span>
+      </button>
+    </form>
+
+    <div id="backtest-results" class="backtest-results" style="display:none" aria-label="Backtest results">
+      <div class="bt-metrics-row">
+        <div class="metric-tile"><div class="metric-tile__label">Total Return</div><div class="metric-tile__value" id="bt-total-return">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Win Rate</div><div class="metric-tile__value" id="bt-win-rate">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Profit Factor</div><div class="metric-tile__value" id="bt-pf">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Avg RR</div><div class="metric-tile__value" id="bt-rr">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Max Drawdown</div><div class="metric-tile__value" id="bt-dd">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Sharpe Ratio</div><div class="metric-tile__value" id="bt-sharpe">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Total Trades</div><div class="metric-tile__value" id="bt-trades">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Expectancy (₹)</div><div class="metric-tile__value" id="bt-expectancy">—</div></div>
+      </div>
+
+      <div class="chart-panel">
+        <h2 class="chart-panel__title">Equity Curve</h2>
+        <div id="equity-chart" class="chart-area" aria-label="Equity curve chart" role="img"></div>
+      </div>
+
+      <div class="bt-tables-row">
+        <div class="bt-table-panel">
+          <h2 class="bt-table-panel__title">Monthly Returns</h2>
+          <table class="data-table" aria-label="Monthly returns table">
+            <thead><tr><th>Month</th><th>Trades</th><th>Wins</th><th>P&amp;L (₹)</th><th>Return%</th></tr></thead>
+            <tbody id="bt-monthly-tbody"><tr><td colspan="5" class="table-loading">—</td></tr></tbody>
+          </table>
+        </div>
+        <div class="bt-table-panel">
+          <h2 class="bt-table-panel__title">Exit Breakdown</h2>
+          <div id="exit-breakdown-chart" class="chart-area chart-area--sm" aria-label="Exit breakdown doughnut chart" role="img"></div>
+        </div>
+      </div>
+
+      <div class="bt-trade-log">
+        <h2 class="bt-table-panel__title">Trade Log</h2>
+        <div class="table-scroll">
+          <table class="data-table" aria-label="Backtest trade log">
+            <thead><tr><th>Date</th><th>Direction</th><th>Entry</th><th>Exit</th><th>P&amp;L (₹)</th><th>RR</th><th>Exit Reason</th></tr></thead>
+            <tbody id="bt-trade-log-tbody"><tr><td colspan="7" class="table-loading">—</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 6 — SESSION REPLAY
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-replay" class="screen" aria-label="Session Replay">
+    <div class="screen-header">
+      <h1 class="screen-title">SESSION REPLAY</h1>
+    </div>
+
+    <div class="replay-controls-top">
+      <div class="form-group">
+        <label class="form-label" for="replay-date">Date</label>
+        <input type="date" id="replay-date" class="form-input" aria-label="Select replay date">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="replay-symbol">Symbol</label>
+        <select id="replay-symbol" class="form-select" aria-label="Select symbol for replay">
+          <option value="NIFTY">NIFTY 50</option>
+          <option value="BANKNIFTY">BANKNIFTY</option>
+          <option value="FINNIFTY">FINNIFTY</option>
+        </select>
+      </div>
+      <button id="load-session-btn" class="btn btn-accent" aria-label="Load session for replay">Load Session</button>
+    </div>
+
+    <div class="replay-layout">
+      <div class="replay-chart-col">
+        <div id="replay-chart" class="chart-area chart-area--lg" aria-label="Replay price chart" role="img">
+          <div class="chart-placeholder">Select date and symbol, then Load Session.</div>
+        </div>
+
+        <div class="replay-playback" role="group" aria-label="Replay playback controls">
+          <button id="replay-rewind" class="btn btn-ghost btn-icon-only" aria-label="Rewind to start">⏮</button>
+          <button id="replay-play-pause" class="btn btn-accent" aria-label="Play replay">▶ Play</button>
+          <div class="replay-speed" role="group" aria-label="Replay speed">
+            <span class="replay-speed__label">Speed:</span>
+            <button class="btn btn-ghost btn-sm replay-speed__btn replay-speed__btn--active" data-speed="1"  aria-label="1x speed" aria-pressed="true">1×</button>
+            <button class="btn btn-ghost btn-sm replay-speed__btn" data-speed="5"  aria-label="5x speed" aria-pressed="false">5×</button>
+            <button class="btn btn-ghost btn-sm replay-speed__btn" data-speed="20" aria-label="20x speed" aria-pressed="false">20×</button>
+          </div>
+          <div class="replay-progress">
+            <span id="replay-bar-num" class="replay-bar-num">Bar 0 / 0</span>
+            <input type="range" id="replay-scrubber" class="replay-scrubber" min="0" max="100" value="0" aria-label="Replay position scrubber">
+          </div>
+        </div>
+      </div>
+
+      <aside class="replay-side-panel" aria-label="Replay signal overlay and bar info">
+        <div class="replay-panel-block">
+          <h2 class="replay-panel-block__title">Current Bar</h2>
+          <dl class="bar-info" id="replay-bar-info" aria-label="OHLCV and indicator data for current bar">
+            <dt>Open</dt><dd id="bar-open">—</dd>
+            <dt>High</dt><dd id="bar-high">—</dd>
+            <dt>Low</dt><dd id="bar-low">—</dd>
+            <dt>Close</dt><dd id="bar-close">—</dd>
+            <dt>Volume</dt><dd id="bar-volume">—</dd>
+            <dt>VWAP</dt><dd id="bar-vwap">—</dd>
+            <dt>EMA 9</dt><dd id="bar-ema9">—</dd>
+            <dt>EMA 21</dt><dd id="bar-ema21">—</dd>
+            <dt>RSI 14</dt><dd id="bar-rsi">—</dd>
+          </dl>
+        </div>
+        <div class="replay-panel-block">
+          <h2 class="replay-panel-block__title">Signal Overlay</h2>
+          <div id="replay-signals-overlay" class="replay-signals-overlay" aria-live="polite">
+            <div class="empty-state empty-state--sm">No signals on this bar.</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 7 — OPTION CHAIN
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-options" class="screen" aria-label="Option Chain">
+    <div class="screen-header">
+      <h1 class="screen-title">OPTION CHAIN</h1>
+    </div>
+
+    <div class="options-controls">
+      <div class="form-group">
+        <label class="form-label" for="oc-symbol">Symbol</label>
+        <select id="oc-symbol" class="form-select" aria-label="Select underlying symbol">
+          <option value="NIFTY">NIFTY</option>
+          <option value="BANKNIFTY">BANKNIFTY</option>
+          <option value="FINNIFTY">FINNIFTY</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="oc-expiry">Expiry</label>
+        <select id="oc-expiry" class="form-select" aria-label="Select expiry date">
+          <option value="">Loading expiries…</option>
+        </select>
+      </div>
+      <button id="oc-refresh-btn" class="btn btn-accent" aria-label="Refresh option chain">Refresh</button>
+    </div>
+
+    <div class="oc-summary" aria-label="Option chain summary metrics">
+      <div class="oc-summary__tile"><span class="oc-summary__label">PCR (OI)</span><span id="oc-pcr" class="oc-summary__val">—</span></div>
+      <div class="oc-summary__tile"><span class="oc-summary__label">Max Pain</span><span id="oc-maxpain" class="oc-summary__val">—</span></div>
+      <div class="oc-summary__tile"><span class="oc-summary__label">ATM Premium</span><span id="oc-atm-premium" class="oc-summary__val">—</span></div>
+      <div class="oc-summary__tile"><span class="oc-summary__label">IV Percentile</span><span id="oc-ivp" class="oc-summary__val">—</span></div>
+      <div class="oc-summary__tile"><span class="oc-summary__label">CE Wall</span><span id="oc-ce-wall" class="oc-summary__val">—</span></div>
+      <div class="oc-summary__tile"><span class="oc-summary__label">PE Wall</span><span id="oc-pe-wall" class="oc-summary__val">—</span></div>
+    </div>
+
+    <div class="table-scroll">
+      <table class="data-table option-chain-table" aria-label="Option chain data">
+        <thead>
+          <tr>
+            <th class="ce-col">CE OI</th>
+            <th class="ce-col">CE Chg OI</th>
+            <th class="ce-col">CE Volume</th>
+            <th class="ce-col">CE IV</th>
+            <th class="ce-col">CE LTP</th>
+            <th class="strike-col">STRIKE</th>
+            <th class="pe-col">PE LTP</th>
+            <th class="pe-col">PE IV</th>
+            <th class="pe-col">PE Volume</th>
+            <th class="pe-col">PE Chg OI</th>
+            <th class="pe-col">PE OI</th>
+          </tr>
+        </thead>
+        <tbody id="option-chain-tbody">
+          <tr><td colspan="11" class="table-loading">Select symbol and expiry to load option chain.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 8 — MARKET HEATMAP
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-heatmap" class="screen" aria-label="Market Heatmap">
+    <div class="screen-header">
+      <h1 class="screen-title">MARKET HEATMAP</h1>
+    </div>
+
+    <div class="heatmap-toolbar">
+      <div class="toggle-group" role="group" aria-label="Heatmap scope">
+        <button class="toggle-group__btn toggle-group__btn--active" data-heatmap="nifty50" aria-pressed="true">NIFTY 50</button>
+        <button class="toggle-group__btn" data-heatmap="sector" aria-pressed="false">SECTOR</button>
+      </div>
+      <div class="heatmap-legend" aria-label="Heatmap color legend">
+        <span class="legend-chip legend-chip--strong-neg">-3%+</span>
+        <span class="legend-chip legend-chip--neg">-1–3%</span>
+        <span class="legend-chip legend-chip--flat">±1%</span>
+        <span class="legend-chip legend-chip--pos">+1–3%</span>
+        <span class="legend-chip legend-chip--strong-pos">+3%+</span>
+      </div>
+    </div>
+
+    <div class="heatmap-layout">
+      <div class="heatmap-canvas-wrap">
+        <canvas id="heatmap-canvas" width="800" height="500" aria-label="Market heatmap visualization" role="img"></canvas>
+      </div>
+      <aside class="heatmap-sidebar" aria-label="Top and bottom movers">
+        <div class="movers-block">
+          <h2 class="movers-block__title">TOP GAINERS</h2>
+          <ul id="heatmap-top-movers" class="movers-list" aria-label="Top gaining stocks">
+            <li class="movers-list__item movers-list__item--loading">Loading…</li>
+          </ul>
+        </div>
+        <div class="movers-block">
+          <h2 class="movers-block__title">BOTTOM LOSERS</h2>
+          <ul id="heatmap-bottom-movers" class="movers-list" aria-label="Bottom losing stocks">
+            <li class="movers-list__item movers-list__item--loading">Loading…</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 9 — RISK CALCULATOR
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-risk" class="screen" aria-label="Risk Calculator">
+    <div class="screen-header">
+      <h1 class="screen-title">RISK CALCULATOR</h1>
+    </div>
+
+    <div class="risk-layout">
+      <form id="risk-form" class="risk-form" aria-label="Risk calculation inputs" novalidate>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="risk-capital">Capital (₹)</label>
+            <input type="number" id="risk-capital" class="form-input" value="500000" min="1000" step="1000" aria-label="Total trading capital in rupees" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="risk-pct">Risk per Trade %</label>
+            <input type="number" id="risk-pct" class="form-input" value="1" min="0.1" max="5" step="0.1" aria-label="Risk percentage per trade" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="risk-instrument">Instrument</label>
+            <select id="risk-instrument" class="form-select" aria-label="Select instrument type">
+              <option value="CE">Call Option (CE)</option>
+              <option value="PE">Put Option (PE)</option>
+              <option value="EQUITY">Equity / Futures</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="risk-entry">Entry Price (₹)</label>
+            <input type="number" id="risk-entry" class="form-input" placeholder="e.g. 24500" step="0.05" aria-label="Entry price" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="risk-sl">Stop Loss (₹)</label>
+            <input type="number" id="risk-sl" class="form-input" placeholder="e.g. 24300" step="0.05" aria-label="Stop loss price" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="risk-target">Target (₹)</label>
+            <input type="number" id="risk-target" class="form-input" placeholder="e.g. 24900" step="0.05" aria-label="Target price" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="risk-lotsize">Lot Size</label>
+            <input type="number" id="risk-lotsize" class="form-input" value="50" min="1" aria-label="Lot size (units per contract)">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="risk-premium">Option Premium (₹)</label>
+            <input type="number" id="risk-premium" class="form-input" placeholder="e.g. 150" step="0.05" aria-label="Option premium (for CE/PE)">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-accent" aria-label="Calculate risk parameters">Calculate</button>
+      </form>
+
+      <div id="risk-output" class="risk-output" aria-label="Risk calculation results" aria-live="polite">
+        <div class="risk-output__grid">
+          <div class="risk-tile"><div class="risk-tile__label">Contracts / Qty</div><div class="risk-tile__val" id="ro-contracts">—</div></div>
+          <div class="risk-tile risk-tile--danger"><div class="risk-tile__label">Max Loss (₹)</div><div class="risk-tile__val" id="ro-maxloss">—</div></div>
+          <div class="risk-tile risk-tile--danger"><div class="risk-tile__label">Max Loss %</div><div class="risk-tile__val" id="ro-maxloss-pct">—</div></div>
+          <div class="risk-tile risk-tile--success"><div class="risk-tile__label">Target Gain (₹)</div><div class="risk-tile__val" id="ro-gain">—</div></div>
+          <div class="risk-tile"><div class="risk-tile__label">Risk:Reward</div><div class="risk-tile__val" id="ro-rr">—</div></div>
+          <div class="risk-tile"><div class="risk-tile__label">Breakeven</div><div class="risk-tile__val" id="ro-be">—</div></div>
+          <div class="risk-tile"><div class="risk-tile__label">1R Level</div><div class="risk-tile__val" id="ro-1r">—</div></div>
+          <div class="risk-tile"><div class="risk-tile__label">2R Level</div><div class="risk-tile__val" id="ro-2r">—</div></div>
+          <div class="risk-tile"><div class="risk-tile__label">3R Level</div><div class="risk-tile__val" id="ro-3r">—</div></div>
+          <div class="risk-tile"><div class="risk-tile__label">Margin Req. (est.)</div><div class="risk-tile__val" id="ro-margin">—</div></div>
+        </div>
+
+        <div class="fno-cost-table">
+          <h2 class="fno-cost-table__title">F&amp;O Cost Breakdown</h2>
+          <table class="data-table" aria-label="F&O cost breakdown">
+            <thead><tr><th>Component</th><th>Amount (₹)</th></tr></thead>
+            <tbody>
+              <tr><td>Brokerage</td><td id="ro-brokerage">—</td></tr>
+              <tr><td>STT</td><td id="ro-stt">—</td></tr>
+              <tr><td>Exchange Charges</td><td id="ro-exc">—</td></tr>
+              <tr><td>GST (18%)</td><td id="ro-gst">—</td></tr>
+              <tr><td>SEBI Fee</td><td id="ro-sebi">—</td></tr>
+              <tr class="table-total"><td>Total Charges</td><td id="ro-total-charges">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="daily-loss-limit-panel" aria-label="Daily loss limit status">
+          <div class="form-group">
+            <label class="form-label" for="daily-loss-limit">Daily Loss Limit (₹)</label>
+            <input type="number" id="daily-loss-limit" class="form-input" placeholder="e.g. 5000" aria-label="Daily loss limit in rupees">
+          </div>
+          <div id="daily-loss-status" class="daily-loss-status" aria-live="polite">Set a daily loss limit to enable automatic halt.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 10 — TRADE JOURNAL
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-journal" class="screen" aria-label="Trade Journal">
+    <div class="screen-header">
+      <h1 class="screen-title">TRADE JOURNAL</h1>
+      <div class="screen-header__actions">
+        <button id="export-csv-btn" class="btn btn-secondary btn-sm" aria-label="Export journal to CSV">Export CSV</button>
+        <button id="toggle-add-trade-btn" class="btn btn-accent btn-sm" aria-label="Toggle add trade form" aria-expanded="false">+ Log Trade</button>
+      </div>
+    </div>
+
+    <div id="add-trade-form-wrap" class="collapsible" style="display:none" aria-label="Add trade form">
+      <form id="add-trade-form" class="trade-form" aria-label="Log a new trade">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="tj-date">Date</label>
+            <input type="date" id="tj-date" class="form-input" required aria-label="Trade date">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tj-symbol">Symbol</label>
+            <input type="text" id="tj-symbol" class="form-input" placeholder="e.g. NIFTY 24500 CE" required aria-label="Trade symbol">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tj-setup">Setup</label>
+            <select id="tj-setup" class="form-select" aria-label="Select trading setup">
+              <option value="orb">ORB</option>
+              <option value="vwap_reclaim">VWAP Reclaim</option>
+              <option value="ema_cross">EMA Cross</option>
+              <option value="gap_fade">Gap Fade</option>
+              <option value="momentum_burst">Momentum Burst</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tj-direction">Direction</label>
+            <select id="tj-direction" class="form-select" aria-label="Select trade direction">
+              <option value="LONG">LONG (CE)</option>
+              <option value="SHORT">SHORT (PE)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="tj-entry">Entry (₹)</label>
+            <input type="number" id="tj-entry" class="form-input" step="0.05" required aria-label="Entry price">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tj-exit">Exit (₹)</label>
+            <input type="number" id="tj-exit" class="form-input" step="0.05" required aria-label="Exit price">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tj-qty">Qty / Lots</label>
+            <input type="number" id="tj-qty" class="form-input" value="1" min="1" required aria-label="Quantity or number of lots">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tj-pnl">P&amp;L (₹)</label>
+            <input type="number" id="tj-pnl" class="form-input" step="1" aria-label="Profit or loss in rupees (auto-calculated or override)">
+          </div>
+        </div>
+        <div class="form-group form-group--full">
+          <label class="form-label">Mistake Tags</label>
+          <div class="checkbox-group" role="group" aria-label="Select mistake tags">
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="early_entry"> Early Entry</label>
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="late_entry"> Late Entry</label>
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="fomo"> FOMO Trade</label>
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="oversized"> Oversized Position</label>
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="sl_moved"> SL Moved</label>
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="no_plan"> No Plan</label>
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="revenge"> Revenge Trade</label>
+          </div>
+        </div>
+        <div class="form-group form-group--full">
+          <label class="form-label" for="tj-notes">Notes / Post-mortem</label>
+          <textarea id="tj-notes" class="form-textarea" rows="3" placeholder="What went right, what went wrong, lessons learned…" aria-label="Trade notes and post-mortem analysis"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-accent" aria-label="Save trade to journal">Save Trade</button>
+          <button type="button" id="cancel-add-trade-btn" class="btn btn-ghost" aria-label="Cancel and close form">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="filter-bar" role="search" aria-label="Filter trades">
+      <input type="date" id="jf-date-from" class="form-input form-input--sm" aria-label="Filter from date">
+      <span aria-hidden="true">to</span>
+      <input type="date" id="jf-date-to" class="form-input form-input--sm" aria-label="Filter to date">
+      <select id="jf-setup" class="form-select form-select--sm" aria-label="Filter by setup">
+        <option value="">All Setups</option>
+        <option value="orb">ORB</option>
+        <option value="vwap_reclaim">VWAP Reclaim</option>
+        <option value="ema_cross">EMA Cross</option>
+        <option value="gap_fade">Gap Fade</option>
+      </select>
+      <select id="jf-dir" class="form-select form-select--sm" aria-label="Filter by direction">
+        <option value="">All</option>
+        <option value="LONG">LONG</option>
+        <option value="SHORT">SHORT</option>
+      </select>
+      <button id="jf-apply-btn" class="btn btn-secondary btn-sm" aria-label="Apply journal filters">Filter</button>
+      <button id="jf-reset-btn" class="btn btn-ghost btn-sm" aria-label="Reset journal filters">Reset</button>
+    </div>
+
+    <div class="pnl-summary-strip" aria-label="P&L summary" id="journal-pnl-strip">
+      <div class="pnl-strip__item"><span class="pnl-strip__label">Total Trades</span><span id="jsum-total" class="pnl-strip__val">0</span></div>
+      <div class="pnl-strip__item"><span class="pnl-strip__label">Wins</span><span id="jsum-wins" class="pnl-strip__val pnl-strip__val--pos">0</span></div>
+      <div class="pnl-strip__item"><span class="pnl-strip__label">Losses</span><span id="jsum-losses" class="pnl-strip__val pnl-strip__val--neg">0</span></div>
+      <div class="pnl-strip__item"><span class="pnl-strip__label">Net P&amp;L</span><span id="jsum-pnl" class="pnl-strip__val">₹0</span></div>
+      <div class="pnl-strip__item"><span class="pnl-strip__label">Win Rate</span><span id="jsum-winrate" class="pnl-strip__val">0%</span></div>
+      <div class="pnl-strip__item"><span class="pnl-strip__label">Avg RR</span><span id="jsum-rr" class="pnl-strip__val">—</span></div>
+    </div>
+
+    <div class="table-scroll">
+      <table class="data-table" aria-label="Trade journal entries" id="journal-table">
+        <thead>
+          <tr>
+            <th>Date</th><th>Symbol</th><th>Setup</th><th>Dir</th>
+            <th>Entry</th><th>Exit</th><th>Qty</th><th>P&amp;L (₹)</th>
+            <th>Mistakes</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="journal-tbody">
+          <tr><td colspan="10" class="table-loading">No trades logged yet. Click "+ Log Trade" to add your first entry.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 11 — PERFORMANCE ANALYTICS
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-analytics" class="screen" aria-label="Performance Analytics">
+    <div class="screen-header">
+      <h1 class="screen-title">PERFORMANCE ANALYTICS</h1>
+    </div>
+
+    <div class="analytics-summary" aria-label="Key performance metrics">
+      <div class="metric-tile"><div class="metric-tile__label">Win Rate</div><div class="metric-tile__value" id="an-winrate">—</div></div>
+      <div class="metric-tile"><div class="metric-tile__label">Expectancy (₹)</div><div class="metric-tile__value" id="an-expectancy">—</div></div>
+      <div class="metric-tile"><div class="metric-tile__label">Profit Factor</div><div class="metric-tile__value" id="an-pf">—</div></div>
+      <div class="metric-tile"><div class="metric-tile__label">Avg RR Achieved</div><div class="metric-tile__value" id="an-rr">—</div></div>
+      <div class="metric-tile"><div class="metric-tile__label">Sharpe Ratio</div><div class="metric-tile__value" id="an-sharpe">—</div></div>
+      <div class="metric-tile"><div class="metric-tile__label">Max Drawdown</div><div class="metric-tile__value" id="an-dd">—</div></div>
+    </div>
+
+    <div class="chart-panel">
+      <h2 class="chart-panel__title">Equity Curve (Journal)</h2>
+      <div id="analytics-equity-chart" class="chart-area" aria-label="Journal equity curve" role="img"></div>
+    </div>
+
+    <div class="analytics-tables-row">
+      <div class="analytics-table-panel">
+        <h2 class="analytics-table-panel__title">Performance by Setup</h2>
+        <table class="data-table" aria-label="Performance breakdown by trading setup">
+          <thead><tr><th>Setup</th><th>Trades</th><th>Win%</th><th>Avg P&amp;L</th><th>PF</th></tr></thead>
+          <tbody id="an-by-setup-tbody"><tr><td colspan="5" class="table-loading">No data.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="analytics-table-panel">
+        <h2 class="analytics-table-panel__title">Performance by Weekday</h2>
+        <table class="data-table" aria-label="Performance breakdown by day of week">
+          <thead><tr><th>Day</th><th>Trades</th><th>Win%</th><th>Net P&amp;L</th></tr></thead>
+          <tbody id="an-by-weekday-tbody"><tr><td colspan="4" class="table-loading">No data.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="pnl-calendar-wrap" aria-label="P&L calendar heatmap">
+      <h2 class="chart-panel__title">P&amp;L Calendar</h2>
+      <div id="pnl-calendar" class="pnl-calendar" aria-label="Monthly P&L heatmap calendar" role="img"></div>
+    </div>
+
+    <div class="analytics-insights" aria-label="Performance insights">
+      <h2 class="chart-panel__title">Insights</h2>
+      <ul id="insights-list" class="insights-list" aria-label="Automated trading insights">
+        <li class="insights-list__item insights-list__item--loading">Add trades to your journal to generate insights.</li>
+      </ul>
+    </div>
+
+    <div class="mistake-freq-wrap">
+      <h2 class="chart-panel__title">Mistake Frequency</h2>
+      <div id="mistake-freq-chart" class="mistake-freq-chart" aria-label="Mistake frequency bar chart" role="img"></div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 12 — SETTINGS
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-settings" class="screen" aria-label="Settings">
+    <div class="screen-header">
+      <h1 class="screen-title">SETTINGS</h1>
+    </div>
+
+    <div class="settings-layout">
+
+      <div class="settings-group" aria-label="API configuration">
+        <h2 class="settings-group__title">API Configuration</h2>
+        <div class="form-group">
+          <label class="form-label" for="settings-api-url">Backend API URL</label>
+          <div class="input-with-action">
+            <input type="url" id="settings-api-url" class="form-input" placeholder="http://localhost:5000" aria-label="Backend API base URL">
+            <button id="test-api-btn" class="btn btn-secondary" aria-label="Test API connection">Test Connection</button>
+          </div>
+          <div id="api-test-result" class="settings-feedback" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <div class="settings-group" aria-label="Capital and risk settings">
+        <h2 class="settings-group__title">Capital &amp; Risk</h2>
+        <div class="form-group">
+          <label class="form-label" for="settings-capital">Default Capital (₹)</label>
+          <input type="number" id="settings-capital" class="form-input" value="500000" min="10000" step="10000" aria-label="Default trading capital in rupees">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="settings-risk-pct">Default Risk % per Trade
+            <span id="settings-risk-val" class="slider-val">1.0%</span>
+          </label>
+          <input type="range" id="settings-risk-pct" class="form-range" min="0.1" max="5" step="0.1" value="1.0" aria-label="Default risk percentage per trade" aria-valuenow="1.0" aria-valuemin="0.1" aria-valuemax="5">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="settings-daily-loss">Daily Loss Limit %</label>
+          <input type="number" id="settings-daily-loss" class="form-input" value="3" min="0.5" max="10" step="0.5" aria-label="Daily loss limit as percentage of capital">
+          <span class="form-hint">Trading halts when daily P&amp;L breaches this level.</span>
+        </div>
+      </div>
+
+      <div class="settings-group settings-group--prominent" aria-label="Paper trading mode">
+        <h2 class="settings-group__title">Paper Trading Mode</h2>
+        <div class="paper-trade-toggle">
+          <div class="paper-trade-toggle__info">
+            <div class="paper-trade-toggle__name">PAPER TRADING</div>
+            <div class="paper-trade-toggle__desc">All signals and trades are simulated. No real orders placed.</div>
+          </div>
+          <label class="toggle-switch" for="paper-trading-toggle">
+            <input type="checkbox" id="paper-trading-toggle" role="switch" aria-checked="true" checked aria-label="Enable or disable paper trading mode">
+            <span class="toggle-switch__slider"></span>
+          </label>
+        </div>
+        <div id="paper-trade-status" class="paper-trade-status paper-trade-status--active" aria-live="polite">
+          PAPER MODE ACTIVE — Trades will not be executed
+        </div>
+      </div>
+
+      <div class="settings-group" aria-label="Alert preferences">
+        <h2 class="settings-group__title">Alert Preferences</h2>
+        <div class="checkbox-group" role="group" aria-label="Select alert types">
+          <label class="checkbox-label"><input type="checkbox" id="alert-signal" checked name="alerts" value="signal"> New Signal Detected</label>
+          <label class="checkbox-label"><input type="checkbox" id="alert-regime" checked name="alerts" value="regime"> Regime Change</label>
+          <label class="checkbox-label"><input type="checkbox" id="alert-loss-limit" checked name="alerts" value="loss_limit"> Daily Loss Limit Warning</label>
+          <label class="checkbox-label"><input type="checkbox" id="alert-vix-spike" name="alerts" value="vix_spike"> VIX Spike &gt; 20</label>
+          <label class="checkbox-label"><input type="checkbox" id="alert-eod" checked name="alerts" value="eod"> EOD Square-off Reminder (15:00)</label>
+        </div>
+      </div>
+
+      <div class="settings-group settings-group--danger" aria-label="Danger zone">
+        <h2 class="settings-group__title">Danger Zone</h2>
+        <div class="settings-danger-actions">
+          <div class="settings-danger-item">
+            <div class="settings-danger-item__info">
+              <strong>Clear Trade Journal</strong>
+              <p>Permanently delete all journal entries. This cannot be undone.</p>
+            </div>
+            <button id="clear-journal-btn" class="btn btn-danger" aria-label="Clear all journal entries">Clear Journal</button>
+          </div>
+          <div class="settings-danger-item">
+            <div class="settings-danger-item__info">
+              <strong>Reset All Settings</strong>
+              <p>Restore all settings to factory defaults.</p>
+            </div>
+            <button id="reset-settings-btn" class="btn btn-danger" aria-label="Reset all settings to defaults">Reset Settings</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-group settings-group--muted" aria-label="Theme settings (coming soon)">
+        <h2 class="settings-group__title">Theme <span class="badge badge--soon">SOON</span></h2>
+        <p class="settings-placeholder">Custom color themes and chart styles coming in a future release.</p>
+      </div>
+
+      <div class="settings-save-row">
+        <button id="save-settings-btn" class="btn btn-accent" aria-label="Save all settings">Save Settings</button>
+        <span id="settings-save-status" class="settings-feedback" aria-live="polite"></span>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     BOTTOM NAVIGATION (mobile only)
+═══════════════════════════════════════════════════════════════ -->
+<nav class="bottom-nav" aria-label="Mobile bottom navigation" role="navigation">
+  <a href="#dashboard" class="bottom-nav__item" data-screen="dashboard" aria-label="Dashboard">
+    <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+      <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+    </svg>
+    <span class="bottom-nav__label">Dashboard</span>
+  </a>
+  <a href="#scanner" class="bottom-nav__item" data-screen="scanner" aria-label="Scanner">
+    <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+    </svg>
+    <span class="bottom-nav__label">Scanner</span>
+  </a>
+  <a href="#options" class="bottom-nav__item" data-screen="options" aria-label="Option Chain">
+    <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </svg>
+    <span class="bottom-nav__label">Options</span>
+  </a>
+  <a href="#journal" class="bottom-nav__item" data-screen="journal" aria-label="Trade Journal">
+    <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+    </svg>
+    <span class="bottom-nav__label">Journal</span>
+  </a>
+  <a href="#settings" class="bottom-nav__item" data-screen="settings" aria-label="Settings">
+    <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+    <span class="bottom-nav__label">Settings</span>
+  </a>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TOAST CONTAINER
+═══════════════════════════════════════════════════════════════ -->
+<div id="toast-container" class="toast-container" aria-live="assertive" aria-atomic="false" role="status"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODAL OVERLAY
+═══════════════════════════════════════════════════════════════ -->
+<div id="modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Modal dialog" style="display:none">
+  <div id="modal-content" class="modal" role="document"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     DAILY LOSS LOCK OVERLAY
+═══════════════════════════════════════════════════════════════ -->
+<div id="loss-lock-overlay" class="loss-lock-overlay" style="display:none" role="alertdialog" aria-modal="true" aria-label="Daily loss limit breached — trading halted">
+  <div class="loss-lock-inner">
+    <div class="loss-lock-icon" aria-hidden="true">🛑</div>
+    <h1 class="heading-xl loss-lock-heading">DAILY LOSS LIMIT BREACHED</h1>
+    <p class="loss-lock-amount price" id="loss-lock-amount">-₹0</p>
+    <p class="loss-lock-desc">Trading halted for today. Your discipline is your edge — come back tomorrow.</p>
+    <div class="loss-lock-actions">
+      <button class="btn btn-ghost" onclick="window.APP && window.APP.dismissLossLock()" aria-label="Override loss lock — requires confirmation">Override (confirm)</button>
+    </div>
+    <p class="loss-lock-warning">Overriding removes today's trading halt. Use with caution.</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCRIPTS (order matters)
+═══════════════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.iife.min.js"></script>
+<script src="storage.js"></script>
+<script src="ui.js"></script>
+<script src="charts.js"></script>
+<script src="signals.js"></script>
+<script src="journal.js"></script>
+<script src="replay.js"></script>
+<script src="heatmap.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>

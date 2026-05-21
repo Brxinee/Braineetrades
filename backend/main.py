@@ -43,9 +43,16 @@ from backend.data_loader import (
     DataLoader,
     loader,
 )
-from strategies import REGISTRY as STRATEGY_REGISTRY
-from backtest.engine import run_backtest, run_strategy_on_symbol
-from backtest.metrics import compute_metrics
+from backend.strategies import STRATEGY_REGISTRY
+from backend.backtest import BacktestEngine
+from backend.regime import classify_regime
+from backend.scanners import ScanEngine
+from backend.options import OptionsEngine
+from backend.risk import RiskEngine, RiskParams
+from backend.market_internals import MarketInternals
+from backend.analytics import AnalyticsEngine
+from backend.alerts import AlertManager
+from backend.replay import ReplayEngine
 
 # ── logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
