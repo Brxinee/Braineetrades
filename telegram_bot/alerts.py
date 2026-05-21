@@ -17,6 +17,12 @@ log = logging.getLogger(__name__)
 IST = pytz.timezone("Asia/Kolkata")
 API = "https://braineetrades.vercel.app"
 
+CMD_FOOTER = (
+    "\n━━━━━━━━━━━━━━━━━━━━\n"
+    "/entry · /oi · /levels · /strategies\n"
+    "/regime · /news · /expiry · /status"
+)
+
 REGIME_EMOJI = {
     "BULL_TREND": "🟢", "RECOVERING": "🟡",
     "BEAR_TREND": "🔴", "WEAKENING":  "🟠",
@@ -410,10 +416,8 @@ async def format_morning_brief() -> str:
         "  • 10:00+    → VWAP / trend entries",
         "  • 15:00     → Start booking, trail SL",
         "  • 15:15     → 🚨 EXIT ALL positions",
-        "",
-        "Commands: /entry  /oi  /levels  /regime  /news",
     ]
-    return "\n".join(l for l in lines if l is not None)
+    return "\n".join(l for l in lines if l is not None) + CMD_FOOTER
 
 
 async def format_signal_alert(sig: dict, direction: str, spot: float) -> str:
@@ -476,7 +480,7 @@ async def format_signal_alert(sig: dict, direction: str, spot: float) -> str:
         "  • Hard exit 3:15 PM — no overnight",
         "🚨 *INTRADAY ONLY*",
     ]
-    return "\n".join(lines)
+    return "\n".join(lines) + CMD_FOOTER
 
 
 async def format_entry_suggestion() -> str:
@@ -535,7 +539,7 @@ async def format_entry_suggestion() -> str:
         "",
         "⚠️ No averaging down. Hard exit 3:15 PM.",
         "🚨 *Intraday only — no overnight positions*",
-    ])
+    ]) + CMD_FOOTER
 
 
 def format_strategies_list() -> str:
@@ -555,9 +559,8 @@ def format_strategies_list() -> str:
     lines += [
         "━━━━━━━━━━━━━━━━━━━━",
         "Alerts fire automatically every 15 min.",
-        "Use /entry for on-demand suggestion.",
     ]
-    return "\n".join(lines)
+    return "\n".join(lines) + CMD_FOOTER
 
 
 async def format_oi_analysis() -> str:
@@ -611,7 +614,7 @@ async def format_oi_analysis() -> str:
         "  • Avoid PE below PE Wall",
         "  • Near expiry, price pulls toward Max Pain",
     ]
-    return "\n".join(l for l in lines if l is not None)
+    return "\n".join(l for l in lines if l is not None) + CMD_FOOTER
 
 
 async def format_levels() -> str:
@@ -660,7 +663,7 @@ async def format_levels() -> str:
         pos,
         f"💡 {strategy_hint}" if strategy_hint else "",
     ]
-    return "\n".join(l for l in lines if l is not None)
+    return "\n".join(l for l in lines if l is not None) + CMD_FOOTER
 
 
 def format_exit_reminder(hard: bool = False) -> str:
@@ -670,6 +673,7 @@ def format_exit_reminder(hard: bool = False) -> str:
             "Close ALL open NIFTY option positions.\n"
             "Do NOT hold options overnight.\n"
             "Theta decay kills premium — exit at market if needed."
+            + CMD_FOOTER
         )
     return (
         "⏰ *3:00 PM — Start Exiting*\n\n"
@@ -678,6 +682,7 @@ def format_exit_reminder(hard: bool = False) -> str:
         "  • At SL     → exit immediately, don't hope\n"
         "  • Break-even → exit, not worth overnight risk\n\n"
         "🚨 Hard exit reminder at 3:15 PM."
+        + CMD_FOOTER
     )
 
 
@@ -701,7 +706,7 @@ async def format_eod_summary() -> str:
         "✅ All positions should be closed.",
         "📓 Log your trades — entry, exit, P&L, what worked.",
         "🌙 Good night — brief at 9:10 AM tomorrow.",
-    ])
+    ]) + CMD_FOOTER
 
 
 def fetch_news() -> list[dict]:
@@ -727,8 +732,8 @@ def fetch_news() -> list[dict]:
 
 def format_news(articles: list[dict]) -> str:
     if not articles:
-        return "📰 No important market news right now."
+        return "📰 No important market news right now." + CMD_FOOTER
     lines = ["📰 *NIFTY Market News*", ""]
     for a in articles:
         lines += [f"• [{a['title']}]({a['link']})", f"  _— {a['source']}_", ""]
-    return "\n".join(lines)
+    return "\n".join(lines) + CMD_FOOTER
