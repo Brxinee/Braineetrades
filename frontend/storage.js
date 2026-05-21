@@ -17,7 +17,7 @@
   };
 
   const DEFAULT_SETTINGS = {
-    apiBase:              'http://localhost:8000',
+    apiBase:              '',  // empty = same origin (Vercel); set to http://localhost:8000 for local dev
     capital:              500000,
     riskPct:              2,
     dailyLossLimitPct:    3,
