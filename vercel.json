@@ -2,12 +2,12 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/*.py",
+      "src": "api/app.py",
       "use": "@vercel/python",
-      "config": { "maxLambdaSize": "50mb" }
+      "config": { "maxLambdaSize": "60mb", "maxDuration": 60 }
     },
     {
-      "src": "index.html",
+      "src": "frontend/**",
       "use": "@vercel/static"
     },
     {
@@ -16,20 +16,34 @@
     }
   ],
   "routes": [
-    { "src": "/api/live-quotes", "dest": "/api/live_quotes.py" },
-    { "src": "/api/scan",        "dest": "/api/scan.py" },
-    { "src": "/api/backtest",    "dest": "/api/backtest.py" },
-    { "src": "/public/(.*)",     "dest": "/public/$1" },
-    { "src": "/",                "dest": "/frontend/index.html" },
-    { "src": "/(.*)",            "dest": "/frontend/$1" }
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/app.py"
+    },
+    {
+      "src": "/public/(.*)",
+      "dest": "/public/$1"
+    },
+    {
+      "src": "/",
+      "dest": "/frontend/index.html"
+    },
+    {
+      "src": "/(.*\\.(js|css|ico|png|svg|woff2?))",
+      "dest": "/frontend/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/$1"
+    }
   ],
   "headers": [
     {
       "source": "/api/(.*)",
       "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Origin",  "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
       ]
     },
     {
@@ -37,6 +51,15 @@
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=300" }
       ]
+    },
+    {
+      "source": "/frontend/(.*\\.(js|css))",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400" }
+      ]
     }
-  ]
+  ],
+  "env": {
+    "VERCEL": "1"
+  }
 }

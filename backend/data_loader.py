@@ -37,8 +37,15 @@ NIFTY_SYMBOL    = "^NSEI"
 BANKNIFTY_SYMBOL = "^NSEBANK"
 VIX_SYMBOL      = "^INDIAVIX"
 
-CACHE_DIR = Path("/home/user/Braineetrades/data/cache")
-NIFTY50_JSON = Path("/home/user/Braineetrades/public/data/nifty50.json")
+# Project root: two levels up from this file (backend/data_loader.py → repo root)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# On Vercel, /tmp is the only writable directory; fall back to repo-relative path locally
+_VERCEL = os.environ.get("VERCEL") == "1"
+CACHE_DIR = Path(os.environ.get("CACHE_DIR",
+    "/tmp/braineetrades_cache" if _VERCEL else str(_PROJECT_ROOT / "data" / "cache")
+))
+NIFTY50_JSON = _PROJECT_ROOT / "public" / "data" / "nifty50.json"
 
 IST = pytz.timezone("Asia/Kolkata")
 

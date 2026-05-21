@@ -1480,6 +1480,38 @@ async def alerts_websocket(websocket: WebSocket):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Route: GET /api/alerts/poll  (Vercel-compatible polling fallback)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/alerts/poll")
+async def alerts_poll(since: str | None = Query(default=None)):
+    """
+    Polling fallback for environments that don't support WebSockets (Vercel).
+
+    Returns alerts added after `since` ISO timestamp.
+    Frontend uses this when WebSocket connection fails.
+    """
+    try:
+        history = alert_manager.get_history(50)
+        if since:
+            try:
+                since_dt = datetime.fromisoformat(since)
+                history  = [a for a in history
+                            if datetime.fromisoformat(a["timestamp"]) > since_dt]
+            except Exception:
+                pass
+        return {
+            "alerts":      history,
+            "count":       len(history),
+            "market_open": is_market_open(),
+            "timestamp":   datetime.now(IST).isoformat(),
+        }
+    except Exception as exc:
+        logger.exception("alerts/poll failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Direct-run entry point
 # ─────────────────────────────────────────────────────────────────────────────
 

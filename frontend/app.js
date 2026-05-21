@@ -33,8 +33,18 @@
      API CLIENT
   ═══════════════════════════════════════════════════════════════════════ */
 
+  // Auto-detect API base: on Vercel the frontend and API share the same origin.
+  // When running locally against a separate backend, override in Settings.
+  const _isVercel = window.location.hostname !== 'localhost' &&
+                    window.location.hostname !== '127.0.0.1' &&
+                    !window.location.hostname.startsWith('192.168');
+  const _defaultApiBase = _isVercel ? '' : 'http://localhost:8000';
+
   const API = {
-    base: () => Storage.getSettings().apiBase,
+    base: () => {
+      const saved = Storage.getSettings().apiBase;
+      return (saved && saved.trim()) ? saved.trim() : _defaultApiBase;
+    },
 
     async _fetch(method, path, body) {
       const url = `${API.base()}${path}`;
@@ -1409,49 +1419,83 @@
   ═══════════════════════════════════════════════════════════════════════ */
 
   const AlertWS = {
-    ws:            null,
-    _reconnectMs:  3000,
-    _maxReconnect: 30000,
-    _currentDelay: 3000,
-    _stopped:      false,
+    ws:             null,
+    _stopped:       false,
+    _usingPoll:     false,   // true when WS fails and we fall back to polling
+    _pollTimer:     null,
+    _lastAlertTs:   null,
+    _reconnectMs:   3000,
+    _currentDelay:  3000,
+    _maxReconnect:  30000,
+    _wsFailCount:   0,
 
     connect() {
       this._stopped = false;
-      const base = Storage.getSettings().apiBase.replace(/^http/, 'ws');
+      if (_isVercel) {
+        // On Vercel, WebSocket is not supported — go straight to polling
+        this._startPolling();
+        return;
+      }
+      const base = API.base().replace(/^http/, 'ws');
       try {
         this.ws = new WebSocket(`${base}/api/alerts/ws`);
-        this.ws.onopen    = () => { this._currentDelay = this._reconnectMs; };
+        this.ws.onopen    = () => { this._wsFailCount = 0; this._currentDelay = this._reconnectMs; };
         this.ws.onmessage = (ev) => {
           try { this.onMessage(JSON.parse(ev.data)); }
           catch (_) { this.onMessage({ type: 'info', message: ev.data }); }
         };
-        this.ws.onclose   = () => { if (!this._stopped) this.reconnect(); };
-        this.ws.onerror   = () => { /* onclose will fire */ };
-      } catch (_) { /* WebSocket not available or bad URL */ }
+        this.ws.onclose = () => {
+          if (this._stopped) return;
+          this._wsFailCount++;
+          // After 3 WS failures, fall back silently to polling
+          if (this._wsFailCount >= 3) { this._startPolling(); return; }
+          this.reconnect();
+        };
+        this.ws.onerror = () => { /* onclose will fire */ };
+      } catch (_) { this._startPolling(); }
+    },
+
+    _startPolling() {
+      if (this._usingPoll || this._stopped) return;
+      this._usingPoll = true;
+      this._poll();
+      this._pollTimer = setInterval(() => this._poll(), 30000);  // every 30 s
+    },
+
+    async _poll() {
+      if (this._stopped) return;
+      try {
+        const params = this._lastAlertTs ? `?since=${encodeURIComponent(this._lastAlertTs)}` : '';
+        const data   = await API.get(`/api/alerts/poll${params}`);
+        if (data && data.alerts && data.alerts.length) {
+          data.alerts.forEach(a => this.onMessage(a));
+          this._lastAlertTs = data.timestamp;
+        }
+      } catch (_) { /* silent — no alerts is fine */ }
     },
 
     onMessage(msg) {
-      const type    = msg.type || 'info';
-      const message = msg.message || msg.text || JSON.stringify(msg);
+      const type      = msg.type || 'info';
+      const message   = msg.message || msg.title || msg.text || JSON.stringify(msg);
       const toastType = { signal: 'signal', regime_change: 'warning', vix_spike: 'warning', error: 'error' }[type] || 'info';
-      const settings = Storage.getSettings();
-      if (type === 'signal' && !settings.alertSignals) return;
-      if (type === 'regime_change' && !settings.alertRegimeChange) return;
-      if (type === 'vix_spike' && !settings.alertVolatilitySpike) return;
+      const settings  = Storage.getSettings();
+      if (type === 'signal'        && !settings.alertSignals)       return;
+      if (type === 'regime_change' && !settings.alertRegimeChange)  return;
+      if (type === 'vix_spike'     && !settings.alertVolatilitySpike) return;
+      if (type === 'heartbeat' || type === 'welcome' || type === 'pong') return;
       UI.toast(message, toastType, 6000);
       Storage.addAlert({ type, message, raw: msg });
     },
 
     reconnect() {
-      setTimeout(() => {
-        if (!this._stopped) this.connect();
-      }, this._currentDelay);
+      setTimeout(() => { if (!this._stopped) this.connect(); }, this._currentDelay);
       this._currentDelay = Math.min(this._currentDelay * 1.5, this._maxReconnect);
     },
 
     disconnect() {
       this._stopped = true;
-      if (this.ws) { this.ws.close(); this.ws = null; }
+      if (this.ws)         { this.ws.close(); this.ws = null; }
+      if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
     },
   };
 
