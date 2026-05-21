@@ -847,112 +847,102 @@ async def get_options(
 async def get_market_internals():
     """
     Market internals / breadth for the Nifty 50 universe.
-    Computes: advance/decline ratio, above-EMA20 count, above-VWAP count,
-    average RSI, and individual stock summaries.
+    Uses a single yf.download() batch call (one HTTP request) instead of
+    50 individual fast_info calls to avoid Yahoo Finance rate limits.
     """
     try:
+        import warnings
         universe = loader.get_nifty50_universe()
         symbols  = [s["symbol"] for s in universe]
+        name_map  = {s["symbol"]: s for s in universe}
 
-        end_d   = date.today()
-        start_d = end_d - timedelta(days=30)
+        # ONE batch download for last 30 days of daily OHLCV — avoids rate limits
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            raw = yf.download(
+                symbols,
+                period="30d",
+                interval="1d",
+                auto_adjust=True,
+                progress=False,
+                threads=True,
+            )
 
-        advances   = 0
-        declines   = 0
-        above_ema  = 0
-        above_vwap = 0
-        rsi_values: list[float] = []
-        stock_data: list[dict]  = []
+        if raw.empty:
+            raise RuntimeError("yf.download returned empty DataFrame")
 
-        # Batch fetch quotes
-        quotes = loader.get_batch_quotes(symbols)
-        quote_map = {q["symbol"]: q for q in quotes}
+        # Flatten multi-level columns: (field, symbol) → symbol
+        close_df = raw["Close"] if "Close" in raw else raw.xs("Close", axis=1, level=0)
+        open_df  = raw["Open"]  if "Open"  in raw else raw.xs("Open",  axis=1, level=0)
 
-        for stock_info in universe:
-            sym = stock_info["symbol"]
-            q   = quote_map.get(sym)
+        advances = 0; declines = 0; above_ema = 0; rsi_values: list[float] = []
+        stock_data: list[dict] = []
 
-            if q is None:
+        for sym in symbols:
+            try:
+                if sym not in close_df.columns:
+                    continue
+                closes = close_df[sym].dropna()
+                if len(closes) < 2:
+                    continue
+
+                ltp        = float(closes.iloc[-1])
+                prev_close = float(closes.iloc[-2])
+                change_pct = round((ltp - prev_close) / prev_close * 100, 2) if prev_close else 0.0
+
+                if ltp >= prev_close:
+                    advances += 1
+                else:
+                    declines += 1
+
+                # EMA20
+                ema20_val = float(closes.ewm(span=20, adjust=False).mean().iloc[-1])
+                if ltp > ema20_val:
+                    above_ema += 1
+
+                # RSI
+                delta = closes.diff()
+                gain  = delta.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
+                loss  = (-delta.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
+                rs    = gain / loss.replace(0, float("nan"))
+                rsi_s = 100 - (100 / (1 + rs))
+                rsi_val = float(rsi_s.iloc[-1]) if not rsi_s.empty else None
+                if rsi_val and not math.isnan(rsi_val):
+                    rsi_values.append(rsi_val)
+
+                info = name_map.get(sym, {})
+                stock_data.append({
+                    "symbol":     sym,
+                    "name":       info.get("name", sym),
+                    "sector":     info.get("sector", ""),
+                    "ltp":        round(ltp, 2),
+                    "change_pct": change_pct,
+                    "ema20":      round(ema20_val, 2),
+                    "rsi":        round(rsi_val, 1) if rsi_val else None,
+                    "above_ema20": ltp > ema20_val,
+                })
+            except Exception:
                 continue
 
-            ltp        = q.get("ltp", 0.0)
-            prev_close = q.get("prev_close", 0.0)
-            change_pct = q.get("change_pct", 0.0)
-
-            if ltp > prev_close:
-                advances += 1
-            else:
-                declines += 1
-
-            # Compute EMA20 and RSI from daily data (best effort)
-            ema20_val: float | None = None
-            rsi_val:   float | None = None
-            vwap_val:  float | None = None
-            try:
-                daily_df = loader.get_daily_ohlcv(sym, start_d, end_d)
-                if not daily_df.empty and len(daily_df) >= 5:
-                    close_series = daily_df["close"]
-                    ema20_series = close_series.ewm(span=20, adjust=False).mean()
-                    ema20_val    = float(ema20_series.iloc[-1])
-                    if ema20_val and ltp > ema20_val:
-                        above_ema += 1
-
-                    # RSI from daily close
-                    delta   = close_series.diff()
-                    gain    = delta.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
-                    loss    = (-delta.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
-                    rs      = gain / loss.replace(0, float("nan"))
-                    rsi_s   = 100 - (100 / (1 + rs))
-                    rsi_val = float(rsi_s.iloc[-1]) if not rsi_s.empty else None
-                    if rsi_val and not math.isnan(rsi_val):
-                        rsi_values.append(rsi_val)
-            except Exception:
-                pass
-
-            # VWAP from today's 5m data
-            try:
-                today_5m = loader.get_5m_ohlcv(sym, end_d, end_d)
-                if not today_5m.empty:
-                    tp    = (today_5m["high"] + today_5m["low"] + today_5m["close"]) / 3
-                    tpv   = tp * today_5m["volume"]
-                    cvol  = today_5m["volume"].cumsum()
-                    ctpv  = tpv.cumsum()
-                    vwap_vals = ctpv / cvol.replace(0, float("nan"))
-                    vwap_val  = float(vwap_vals.iloc[-1]) if not vwap_vals.empty else None
-                    if vwap_val and ltp > vwap_val:
-                        above_vwap += 1
-            except Exception:
-                pass
-
-            stock_data.append({
-                "symbol":     sym,
-                "name":       stock_info.get("name", sym),
-                "sector":     stock_info.get("sector", ""),
-                "ltp":        round(ltp, 2),
-                "change_pct": round(change_pct, 2),
-                "ema20":      round(ema20_val, 2) if ema20_val else None,
-                "rsi":        round(rsi_val, 1) if rsi_val else None,
-                "above_ema20":  bool(ema20_val and ltp > ema20_val),
-                "above_vwap":   bool(vwap_val and ltp > vwap_val),
-            })
-
-        total = advances + declines
-        ad_ratio = round(advances / declines, 2) if declines > 0 else float("inf")
+        total    = advances + declines or 1
+        ad_ratio = round(advances / max(declines, 1), 2)
         avg_rsi  = round(sum(rsi_values) / len(rsi_values), 1) if rsi_values else None
 
         return {
+            "advances":  advances,
+            "declines":  declines,
+            "unchanged": 0,
             "breadth": {
-                "advances":         advances,
-                "declines":         declines,
-                "unchanged":        total - advances - declines,
-                "ad_ratio":         ad_ratio,
-                "above_ema20":      above_ema,
-                "above_vwap":       above_vwap,
-                "above_ema20_pct":  round(above_ema / total * 100, 1) if total > 0 else 0,
-                "above_vwap_pct":   round(above_vwap / total * 100, 1) if total > 0 else 0,
-                "avg_rsi":          avg_rsi,
+                "advances":        advances,
+                "declines":        declines,
+                "unchanged":       0,
+                "ad_ratio":        ad_ratio,
+                "above_ema20":     above_ema,
+                "above_ema20_pct": round(above_ema / total * 100, 1),
+                "avg_rsi":         avg_rsi,
             },
             "stocks":    stock_data,
+            "sectors":   {},
             "timestamp": datetime.now(IST).isoformat(),
         }
 

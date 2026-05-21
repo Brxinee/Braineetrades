@@ -174,54 +174,56 @@
     async refresh() {
       const settings = Storage.getSettings();
       UI.showLoading('dash-regime-panel', 'Fetching market regime…');
-      UI.showLoading('dash-signals-panel', 'Scanning signals…');
-      UI.showLoading('dash-internals-panel', 'Loading internals…');
       UI.showLoading('dash-quotes-panel', 'Fetching quotes…');
+      UI.showLoading('dash-internals-panel', 'Loading internals…');
+      UI.showLoading('dash-signals-panel', 'Scanning signals…');
 
-      try {
-        const [regime, internals, quotes, scan] = await Promise.allSettled([
-          API.regime(),
-          API.internals(),
-          API.quotes(NIFTY_SYMBOLS),
-          API.scan(settings.defaultStrategy, []),
-        ]);
+      // Wave 1: regime + quotes (lightweight, 2 yfinance calls each)
+      const [regime, quotes] = await Promise.allSettled([
+        API.regime(),
+        API.quotes(NIFTY_SYMBOLS),
+      ]);
 
-        if (regime.status === 'fulfilled') {
-          this.renderRegimePanel(regime.value);
-          UI.updateRegimeBadge(regime.value.regime);
-          const prev = Storage.getLastRegime();
-          if (prev && prev !== regime.value.regime) {
-            if (settings.alertRegimeChange) UI.toast(`Regime changed: ${prev} → ${regime.value.regime}`, 'warning', 6000);
-          }
-          Storage.setLastRegime(regime.value.regime);
-        } else {
-          UI.showCardError('dash-regime-panel', 'Could not load regime: ' + regime.reason.message);
+      if (regime.status === 'fulfilled') {
+        this.renderRegimePanel(regime.value);
+        UI.updateRegimeBadge(regime.value.regime);
+        const prev = Storage.getLastRegime();
+        if (prev && prev !== regime.value.regime) {
+          if (settings.alertRegimeChange) UI.toast(`Regime changed: ${prev} → ${regime.value.regime}`, 'warning', 6000);
         }
+        Storage.setLastRegime(regime.value.regime);
+      } else {
+        UI.showCardError('dash-regime-panel', 'Could not load regime: ' + regime.reason.message);
+      }
 
-        if (internals.status === 'fulfilled') {
-          this.renderInternals(internals.value);
-        } else {
-          UI.showCardError('dash-internals-panel', 'Internals unavailable');
-        }
+      if (quotes.status === 'fulfilled') {
+        this.renderQuotes(quotes.value);
+        const list = Array.isArray(quotes.value) ? quotes.value : (quotes.value.quotes || []);
+        const nifty     = list.find(x => x.symbol === '^NSEI');
+        const banknifty = list.find(x => x.symbol === '^NSEBANK');
+        UI.updateMarketBar(nifty, banknifty, AutoRefresh.isMarketHours());
+      } else {
+        UI.showCardError('dash-quotes-panel', 'Quotes unavailable');
+      }
 
-        if (quotes.status === 'fulfilled') {
-          this.renderQuotes(quotes.value);
-          const q = quotes.value;
-          const nifty     = q.find ? q.find(x => x.symbol === 'NIFTY 50')     : q['NIFTY 50'];
-          const banknifty = q.find ? q.find(x => x.symbol === 'NIFTY BANK')   : q['NIFTY BANK'];
-          UI.updateMarketBar(nifty, banknifty, AutoRefresh.isMarketHours());
-        } else {
-          UI.showCardError('dash-quotes-panel', 'Quotes unavailable');
-        }
+      // Wave 2: internals + scan (heavier — stagger 1s after wave 1 to avoid rate limit)
+      await new Promise(r => setTimeout(r, 1000));
+      const [internals, scan] = await Promise.allSettled([
+        API.internals(),
+        API.scan(settings.defaultStrategy, []),
+      ]);
 
-        if (scan.status === 'fulfilled') {
-          this.renderSignals(scan.value);
-          Storage.setSignalCache({ data: scan.value, ts: Date.now() });
-        } else {
-          UI.showCardError('dash-signals-panel', 'Signal scan unavailable');
-        }
-      } catch (e) {
-        UI.toast('Dashboard refresh failed: ' + e.message, 'error');
+      if (internals.status === 'fulfilled') {
+        this.renderInternals(internals.value);
+      } else {
+        UI.showCardError('dash-internals-panel', 'Internals unavailable');
+      }
+
+      if (scan.status === 'fulfilled') {
+        this.renderSignals(scan.value);
+        Storage.setSignalCache({ data: scan.value, ts: Date.now() });
+      } else {
+        UI.showCardError('dash-signals-panel', 'Signal scan unavailable');
       }
     },
 
@@ -276,7 +278,7 @@
     renderQuotes(data) {
       const el = document.getElementById('dash-quotes-panel');
       if (!el) return;
-      const quotes = Array.isArray(data) ? data : Object.entries(data).map(([symbol, q]) => ({ symbol, ...q }));
+      const quotes = Array.isArray(data) ? data : (Array.isArray(data.quotes) ? data.quotes : []);
       el.innerHTML = `<h3 style="margin:0 0 12px;font-size:15px;color:#94a3b8">Live Quotes</h3>` +
         quotes.map(q => {
           const { change, changePct, sign } = UI.formatChange(q.ltp || q.last_price, q.prev_close);
@@ -292,7 +294,8 @@
     renderInternals(data) {
       const el = document.getElementById('dash-internals-panel');
       if (!el) return;
-      const adv = data.advances || 0, dec = data.declines || 0, unch = data.unchanged || 0;
+      const b = data.breadth || data;
+      const adv = b.advances || data.advances || 0, dec = b.declines || data.declines || 0, unch = b.unchanged || 0;
       const total = adv + dec + unch || 1;
       const advPct = ((adv / total) * 100).toFixed(0);
       const decPct = ((dec / total) * 100).toFixed(0);
