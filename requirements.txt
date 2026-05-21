@@ -5,3 +5,4 @@ numpy==1.26.4
 yfinance==0.2.54
 pytz==2025.2
 python-multipart==0.0.9
+requests>=2.31.0

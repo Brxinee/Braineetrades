@@ -532,12 +532,12 @@ async def run_scan(req: ScanRequest):
         StratClass = STRATEGY_REGISTRY[strategy_key]
         strategy   = StratClass()
 
-        # Default to full Nifty 50 universe if no symbols provided
+        # Default to Nifty 50 universe; cap at 20 for Vercel performance
         if req.symbols:
-            symbols = req.symbols
+            symbols = req.symbols[:20]  # cap at 20
         else:
             universe = loader.get_nifty50_universe()
-            symbols  = [s["symbol"] for s in universe]
+            symbols  = [s["symbol"] for s in universe[:20]]  # top 20 only on Vercel
 
         end_d   = date.today()
         start_d = end_d - timedelta(days=req.lookback_days)
@@ -847,105 +847,36 @@ async def get_options(
 async def get_market_internals():
     """
     Market internals / breadth for the Nifty 50 universe.
-    Uses a single yf.download() batch call (one HTTP request) instead of
-    50 individual fast_info calls to avoid Yahoo Finance rate limits.
+    Uses NSE India's official public API for live quotes — no rate limits.
     """
     try:
-        import warnings
-        universe = loader.get_nifty50_universe()
-        symbols  = [s["symbol"] for s in universe]
-        name_map  = {s["symbol"]: s for s in universe}
+        from backend.nse_api import get_nifty50_quotes
 
-        # ONE batch download for last 30 days of daily OHLCV — avoids rate limits
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            raw = yf.download(
-                symbols,
-                period="30d",
-                interval="1d",
-                auto_adjust=True,
-                progress=False,
-                threads=True,
-            )
+        quotes = get_nifty50_quotes()
+        if not quotes:
+            raise RuntimeError("NSE API returned no data")
 
-        if raw.empty:
-            raise RuntimeError("yf.download returned empty DataFrame")
-
-        # Flatten multi-level columns: (field, symbol) → symbol
-        close_df = raw["Close"] if "Close" in raw else raw.xs("Close", axis=1, level=0)
-        open_df  = raw["Open"]  if "Open"  in raw else raw.xs("Open",  axis=1, level=0)
-
-        advances = 0; declines = 0; above_ema = 0; rsi_values: list[float] = []
-        stock_data: list[dict] = []
-
-        for sym in symbols:
-            try:
-                if sym not in close_df.columns:
-                    continue
-                closes = close_df[sym].dropna()
-                if len(closes) < 2:
-                    continue
-
-                ltp        = float(closes.iloc[-1])
-                prev_close = float(closes.iloc[-2])
-                change_pct = round((ltp - prev_close) / prev_close * 100, 2) if prev_close else 0.0
-
-                if ltp >= prev_close:
-                    advances += 1
-                else:
-                    declines += 1
-
-                # EMA20
-                ema20_val = float(closes.ewm(span=20, adjust=False).mean().iloc[-1])
-                if ltp > ema20_val:
-                    above_ema += 1
-
-                # RSI
-                delta = closes.diff()
-                gain  = delta.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
-                loss  = (-delta.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean()
-                rs    = gain / loss.replace(0, float("nan"))
-                rsi_s = 100 - (100 / (1 + rs))
-                rsi_val = float(rsi_s.iloc[-1]) if not rsi_s.empty else None
-                if rsi_val and not math.isnan(rsi_val):
-                    rsi_values.append(rsi_val)
-
-                info = name_map.get(sym, {})
-                stock_data.append({
-                    "symbol":     sym,
-                    "name":       info.get("name", sym),
-                    "sector":     info.get("sector", ""),
-                    "ltp":        round(ltp, 2),
-                    "change_pct": change_pct,
-                    "ema20":      round(ema20_val, 2),
-                    "rsi":        round(rsi_val, 1) if rsi_val else None,
-                    "above_ema20": ltp > ema20_val,
-                })
-            except Exception:
-                continue
-
-        total    = advances + declines or 1
-        ad_ratio = round(advances / max(declines, 1), 2)
-        avg_rsi  = round(sum(rsi_values) / len(rsi_values), 1) if rsi_values else None
+        advances = sum(1 for q in quotes if q.get("change_pct", 0) >= 0)
+        declines  = len(quotes) - advances
+        total = len(quotes) or 1
 
         return {
-            "advances":  advances,
-            "declines":  declines,
+            "advances": advances,
+            "declines": declines,
             "unchanged": 0,
             "breadth": {
-                "advances":        advances,
-                "declines":        declines,
-                "unchanged":       0,
-                "ad_ratio":        ad_ratio,
-                "above_ema20":     above_ema,
-                "above_ema20_pct": round(above_ema / total * 100, 1),
-                "avg_rsi":         avg_rsi,
+                "advances": advances,
+                "declines": declines,
+                "unchanged": 0,
+                "ad_ratio": round(advances / max(declines, 1), 2),
+                "above_ema20": 0,
+                "above_ema20_pct": 0,
+                "avg_rsi": None,
             },
-            "stocks":    stock_data,
-            "sectors":   {},
+            "stocks": quotes[:20],  # top 20 for display
+            "sectors": {},
             "timestamp": datetime.now(IST).isoformat(),
         }
-
     except Exception as exc:
         logger.exception("Market internals failed")
         raise HTTPException(status_code=500, detail=str(exc))
