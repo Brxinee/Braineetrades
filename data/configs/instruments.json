@@ -1,0 +1,41 @@
+{
+  "nifty": {
+    "symbol": "^NSEI",
+    "display": "NIFTY 50",
+    "lot_size": 75
+  },
+  "banknifty": {
+    "symbol": "^NSEBANK",
+    "display": "BANKNIFTY",
+    "lot_size": 35
+  },
+  "finnifty": {
+    "symbol": "^CNXFINANCE",
+    "display": "FINNIFTY",
+    "lot_size": 65
+  },
+  "midcpnifty": {
+    "symbol": "^NSEMDCP50",
+    "display": "MIDCPNIFTY",
+    "lot_size": 75
+  },
+  "vix": {
+    "symbol": "^INDIAVIX",
+    "display": "India VIX"
+  },
+  "strike_granularity": {
+    "nifty": 50,
+    "banknifty": 100,
+    "finnifty": 50
+  },
+  "session": {
+    "open": "09:15",
+    "close": "15:30",
+    "timezone": "Asia/Kolkata"
+  },
+  "entry_window": {
+    "open": "09:20",
+    "close": "14:30"
+  },
+  "force_exit": "15:15"
+}
