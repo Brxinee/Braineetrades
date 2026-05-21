@@ -16,26 +16,12 @@
     }
   ],
   "routes": [
-    {
-      "src": "/api/live-quotes",
-      "dest": "/api/live_quotes.py"
-    },
-    {
-      "src": "/api/scan",
-      "dest": "/api/scan.py"
-    },
-    {
-      "src": "/api/backtest",
-      "dest": "/api/backtest.py"
-    },
-    {
-      "src": "/",
-      "dest": "/index.html"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
-    }
+    { "src": "/api/live-quotes", "dest": "/api/live_quotes.py" },
+    { "src": "/api/scan",        "dest": "/api/scan.py" },
+    { "src": "/api/backtest",    "dest": "/api/backtest.py" },
+    { "src": "/public/(.*)",     "dest": "/public/$1" },
+    { "src": "/",                "dest": "/frontend/index.html" },
+    { "src": "/(.*)",            "dest": "/frontend/$1" }
   ],
   "headers": [
     {

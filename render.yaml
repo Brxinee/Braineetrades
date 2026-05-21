@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: braineetrades-api
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: UPSTOX_ACCESS_TOKEN
+        sync: false
+      - key: CACHE_DIR
+        value: /data/cache
+    disk:
+      name: cache
+      mountPath: /data
+      sizeGB: 1
