@@ -27,7 +27,7 @@
     vix_filter:            { label: 'VIX Filter (Meta)',              desc: 'Meta-strategy: enable/disable others based on India VIX level.' },
   };
 
-  const NIFTY_SYMBOLS = ['NIFTY 50', 'NIFTY BANK', 'FINNIFTY', 'MIDCPNIFTY'];
+  const NIFTY_SYMBOLS = ['^NSEI', '^NSEBANK'];
 
   /* ═══════════════════════════════════════════════════════════════════════
      API CLIENT
@@ -67,7 +67,7 @@
     post: (path, body) => API._fetch('POST', path, body),
 
     health:        ()                    => API.get('/api/health'),
-    quotes:        (symbols)             => API.post('/api/quotes', { symbols }),
+    quotes:        (symbols)             => API.get('/api/quotes' + (symbols && symbols.length ? '?symbols=' + encodeURIComponent(symbols.join(',')) : '')),
     regime:        ()                    => API.get('/api/regime'),
     scan:          (strategy, symbols)   => API.post('/api/scan', { strategy, symbols }),
     backtest:      (params)              => API.post('/api/backtest', params),
@@ -183,7 +183,7 @@
           API.regime(),
           API.internals(),
           API.quotes(NIFTY_SYMBOLS),
-          API.scan(settings.defaultStrategy, NIFTY_SYMBOLS),
+          API.scan(settings.defaultStrategy, []),
         ]);
 
         if (regime.status === 'fulfilled') {
