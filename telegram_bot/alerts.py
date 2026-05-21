@@ -2,7 +2,6 @@
 alerts.py — NIFTY 50 Options Intraday Alert Engine.
 
 All signals are for NIFTY weekly options, intraday only.
-Calls braineetrades.vercel.app API for regime + signals + option chain.
 """
 from __future__ import annotations
 
@@ -18,12 +17,16 @@ log = logging.getLogger(__name__)
 IST = pytz.timezone("Asia/Kolkata")
 API = "https://braineetrades.vercel.app"
 
-# ── helpers ───────────────────────────────────────────────────────────────────
-
 REGIME_EMOJI = {
     "BULL_TREND": "🟢", "RECOVERING": "🟡",
     "BEAR_TREND": "🔴", "WEAKENING":  "🟠",
     "SIDEWAYS":   "⬛", "HIGH_VOL":   "⚡",
+}
+
+STRATEGY_DESC = {
+    "ORB15":          "15-min Opening Range Breakout",
+    "VWAP REVERSAL":  "VWAP Bounce / Reversal",
+    "SUPERTREND EMA": "Supertrend + EMA Crossover",
 }
 
 NEWS_KEYWORDS = [
@@ -37,10 +40,11 @@ NEWS_RSS = [
 ]
 
 
+# ── helpers ───────────────────────────────────────────────────────────────────
+
 def _next_thursday() -> str:
-    """Return the nearest upcoming Thursday (weekly NIFTY expiry) as YYYY-MM-DD."""
     today = date.today()
-    days_ahead = (3 - today.weekday()) % 7  # 3 = Thursday
+    days_ahead = (3 - today.weekday()) % 7
     if days_ahead == 0:
         days_ahead = 7
     return (today + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
@@ -48,6 +52,21 @@ def _next_thursday() -> str:
 
 def _atm_strike(spot: float, step: int = 50) -> int:
     return round(round(spot / step) * step)
+
+
+def calc_cpr(high: float, low: float, close: float) -> dict:
+    """Central Pivot Range + support/resistance levels."""
+    pivot = (high + low + close) / 3
+    bc    = (high + low) / 2
+    tc    = (pivot - bc) + pivot
+    r1    = 2 * pivot - low
+    r2    = pivot + (high - low)
+    s1    = 2 * pivot - high
+    s2    = pivot - (high - low)
+    return dict(
+        pivot=round(pivot), tc=round(tc), bc=round(bc),
+        r1=round(r1), r2=round(r2), s1=round(s1), s2=round(s2),
+    )
 
 
 async def _get(path: str, **params) -> dict | None:
@@ -71,6 +90,8 @@ async def _post(path: str, body: dict) -> dict | None:
         log.warning("POST %s failed: %s", path, e)
         return None
 
+
+# ── data fetchers ─────────────────────────────────────────────────────────────
 
 async def get_nifty_spot() -> float | None:
     data = await _get("/api/quotes", symbols="^NSEI")
@@ -101,12 +122,11 @@ async def get_option_chain(expiry: str) -> dict | None:
 
 
 async def get_nifty_signals() -> list[dict]:
-    """Run ORB + VWAP strategies on NIFTY index (^NSEI)."""
     results = []
     for strategy in ["orb15", "vwap_reversal", "supertrend_ema"]:
         data = await _post("/api/scan", {
             "strategy": strategy,
-            "symbols": ["^NSEI"],
+            "symbols":  ["^NSEI"],
             "lookback_days": 1,
         })
         if data and data.get("signals"):
@@ -116,53 +136,101 @@ async def get_nifty_signals() -> list[dict]:
     return results
 
 
+async def get_prev_ohlc() -> dict | None:
+    """Previous trading day OHLC from Stooq (no auth needed)."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.get("https://stooq.com/q/d/l/", params={"s": "^nsei", "i": "d"})
+            r.raise_for_status()
+            rows = [ln.split(",") for ln in r.text.strip().split("\n") if ln]
+            # rows[0] = header, rows[-1] = today/latest, rows[-2] = previous day
+            if len(rows) >= 3:
+                row = rows[-2]
+                return {
+                    "date":  row[0],
+                    "open":  float(row[1]),
+                    "high":  float(row[2]),
+                    "low":   float(row[3]),
+                    "close": float(row[4]),
+                }
+    except Exception as e:
+        log.warning("Stooq OHLC failed: %s", e)
+    return None
+
+
+async def get_option_analysis(expiry: str, spot: float) -> dict:
+    """PCR, CE/PE OI walls, max pain from option chain."""
+    chain = await get_option_chain(expiry)
+    if not chain or "chain" not in chain:
+        return {}
+
+    total_ce_oi = total_pe_oi = 0
+    max_ce_oi = max_pe_oi = 0
+    ce_wall = pe_wall = None
+    pain_map: dict[int, tuple[int, int]] = {}
+
+    for row in chain["chain"]:
+        strike = row.get("strike", 0)
+        ce_oi  = row.get("ce_oi", 0) or 0
+        pe_oi  = row.get("pe_oi", 0) or 0
+        total_ce_oi += ce_oi
+        total_pe_oi += pe_oi
+        if ce_oi > max_ce_oi:
+            max_ce_oi, ce_wall = ce_oi, strike
+        if pe_oi > max_pe_oi:
+            max_pe_oi, pe_wall = pe_oi, strike
+        if strike:
+            pain_map[strike] = (ce_oi, pe_oi)
+
+    max_pain = None
+    if pain_map:
+        min_loss = float("inf")
+        for k in pain_map:
+            loss = sum(
+                c * max(0, s - k) + p * max(0, k - s)
+                for s, (c, p) in pain_map.items()
+            )
+            if loss < min_loss:
+                min_loss, max_pain = loss, k
+
+    pcr = round(total_pe_oi / total_ce_oi, 2) if total_ce_oi else 0
+    return {"pcr": pcr, "ce_wall": ce_wall, "pe_wall": pe_wall, "max_pain": max_pain}
+
+
 # ── option strike suggestion ──────────────────────────────────────────────────
 
 async def suggest_option(direction: str, spot: float, expiry: str) -> dict:
-    """
-    Given bullish/bearish direction and NIFTY spot, suggest the best CE or PE.
-    Returns dict with strike, type (CE/PE), premium estimate, SL, target.
-    """
-    opt_type = "CE" if direction.upper() in ("BULLISH", "LONG", "BUY") else "PE"
-    atm = _atm_strike(spot)
-
-    # For CE: buy ATM or 1-strike OTM (cheaper premium, higher leverage)
-    # For PE: buy ATM or 1-strike OTM
-    strike = atm if opt_type == "CE" else atm
+    opt_type   = "CE" if direction.upper() in ("BULLISH", "LONG", "BUY") else "PE"
+    atm        = _atm_strike(spot)
+    strike     = atm
     otm_strike = (atm + 50) if opt_type == "CE" else (atm - 50)
 
-    # Try to get live premium from option chain
     premium_atm = None
-    premium_otm = None
     chain = await get_option_chain(expiry)
     if chain and "chain" in chain:
         for row in chain["chain"]:
             if row.get("strike") == strike:
                 premium_atm = row.get(f"{opt_type.lower()}_ltp") or row.get("ltp")
-            if row.get("strike") == otm_strike:
-                premium_otm = row.get(f"{opt_type.lower()}_ltp") or row.get("ltp")
 
-    # Fallback: rough BS estimate using VIX
     vix = await get_vix() or 15.0
     if not premium_atm:
-        T = 5 / 365  # ~1 week to expiry
+        T     = 5 / 365
         sigma = vix / 100
-        d1 = (math.log(spot / strike) + 0.5 * sigma ** 2 * T) / (sigma * math.sqrt(T))
-        d2 = d1 - sigma * math.sqrt(T)
-        ncdf = lambda x: math.erfc(-x / math.sqrt(2)) / 2
+        d1    = (math.log(spot / strike) + 0.5 * sigma ** 2 * T) / (sigma * math.sqrt(T))
+        d2    = d1 - sigma * math.sqrt(T)
+        ncdf  = lambda x: math.erfc(-x / math.sqrt(2)) / 2
         if opt_type == "CE":
             premium_atm = round(spot * ncdf(d1) - strike * math.exp(-0.065 * T) * ncdf(d2), 0)
         else:
             premium_atm = round(strike * math.exp(-0.065 * T) * ncdf(-d2) - spot * ncdf(-d1), 0)
         premium_atm = max(premium_atm, 10)
 
-    sl_pct     = 0.40  # SL at 40% of premium (tight intraday)
-    target_pct = 1.80  # Target 80% profit (realistic for intraday)
-
     entry  = premium_atm
-    sl     = round(entry * sl_pct)
-    target = round(entry * target_pct)
-    lot_sl = round((entry - sl) * 50)  # NIFTY lot = 50 units
+    sl     = round(entry * 0.40)
+    t1     = round(entry * 1.50)
+    t2     = round(entry * 1.80)
+    lot_sl = round((entry - sl) * 50)
+    rr     = round((t2 - entry) / (entry - sl), 1) if entry > sl else 0
 
     return {
         "opt_type":   opt_type,
@@ -171,25 +239,29 @@ async def suggest_option(direction: str, spot: float, expiry: str) -> dict:
         "expiry":     expiry,
         "premium":    entry,
         "sl":         sl,
-        "target":     target,
+        "t1":         t1,
+        "t2":         t2,
         "lot_sl":     lot_sl,
         "vix":        round(vix, 1),
+        "rr":         rr,
     }
 
 
 # ── message formatters ────────────────────────────────────────────────────────
 
 async def format_morning_brief() -> str:
-    now       = datetime.now(IST).strftime("%d %b %Y")
-    regime    = await get_regime()
-    spot      = await get_nifty_spot()
-    vix       = await get_vix()
-    expiry    = _next_thursday()
+    now    = datetime.now(IST).strftime("%d %b %Y")
+    regime = await get_regime()
+    spot   = await get_nifty_spot()
+    vix    = await get_vix()
+    expiry = _next_thursday()
+    prev   = await get_prev_ohlc()
+    oi     = await get_option_analysis(expiry, spot or 0) if spot else {}
 
-    r_name  = regime.get("regime",     "UNKNOWN") if regime else "UNKNOWN"
-    conf    = regime.get("confidence",  0)          if regime else 0
-    gate    = regime.get("trade_gate", "?")         if regime else "?"
-    emoji   = REGIME_EMOJI.get(r_name, "❓")
+    r_name = regime.get("regime",     "UNKNOWN") if regime else "UNKNOWN"
+    conf   = regime.get("confidence",  0)         if regime else 0
+    gate   = regime.get("trade_gate", "?")        if regime else "?"
+    emoji  = REGIME_EMOJI.get(r_name, "❓")
 
     gate_text = {
         "TRADE":   "✅ Good day to trade options",
@@ -201,10 +273,10 @@ async def format_morning_brief() -> str:
       else "📉 Lean BEARISH → watch for PE entries" if r_name in ("BEAR_TREND", "WEAKENING") \
       else "↔️ No clear bias — wait for ORB breakout"
 
-    atm = _atm_strike(spot) if spot else "?"
+    atm       = _atm_strike(spot) if spot else "?"
     exp_short = datetime.strptime(expiry, "%Y-%m-%d").strftime("%d %b")
 
-    lines = [
+    lines: list[str] = [
         f"🌅 *NIFTY Options Brief — {now}*",
         "",
         f"{emoji} *Regime: {r_name}*  ({conf:.0f}% conf)",
@@ -215,72 +287,117 @@ async def format_morning_brief() -> str:
         f"🎯 *ATM Strike:* {atm}  |  Expiry: {exp_short}",
         "",
         bias,
+    ]
+
+    # CPR section
+    if prev and all(prev.get(k) for k in ("high", "low", "close")):
+        cpr = calc_cpr(prev["high"], prev["low"], prev["close"])
+        pos = ""
+        if spot:
+            if spot > cpr["tc"]:
+                pos = "🟢 Above TC — Strong bullish"
+            elif spot > cpr["pivot"]:
+                pos = "🟡 Between Pivot & TC — Cautiously bullish"
+            elif spot > cpr["bc"]:
+                pos = "🟠 Between BC & Pivot — Mild bearish"
+            else:
+                pos = "🔴 Below BC — Strong bearish"
+        lines += [
+            "",
+            "📐 *CPR Levels (Prev Day)*",
+            f"  R2: {cpr['r2']:,}  |  R1: {cpr['r1']:,}",
+            f"  ▲ TC (Top):   *{cpr['tc']:,}*",
+            f"     Pivot:     *{cpr['pivot']:,}*",
+            f"  ▼ BC (Bot):   *{cpr['bc']:,}*",
+            f"  S1: {cpr['s1']:,}  |  S2: {cpr['s2']:,}",
+            f"  → {pos}" if pos else "",
+        ]
+
+    # OI section
+    if oi:
+        pcr     = oi.get("pcr", 0)
+        pcr_txt = "🟢 Bullish" if pcr > 1.2 else "🔴 Bearish" if pcr < 0.8 else "⬛ Neutral"
+        lines  += ["", "📊 *Option Chain OI*", f"  PCR: *{pcr}*  ({pcr_txt})"]
+        if oi.get("ce_wall"):
+            lines.append(f"  🔴 Resistance (CE Wall): *{oi['ce_wall']:,}*")
+        if oi.get("pe_wall"):
+            lines.append(f"  🟢 Support (PE Wall):    *{oi['pe_wall']:,}*")
+        if oi.get("max_pain"):
+            lines.append(f"  🎯 Max Pain: *{oi['max_pain']:,}*")
+
+    lines += [
         "",
         "🕘 *Today's plan:*",
-        "  • 9:15–9:30: Wait — let market settle",
-        "  • 9:30: ORB setup — enter on breakout",
-        "  • 10:00+: VWAP reversal / trend entries",
-        "  • 15:00: Start trailing / booking profits",
-        "  • 15:15: 🚨 EXIT ALL — no overnight options",
+        "  • 9:15–9:30 → Wait, let market settle",
+        "  • 9:30      → ORB breakout entry",
+        "  • 10:00+    → VWAP / trend entries",
+        "  • 15:00     → Start booking, trail SL",
+        "  • 15:15     → 🚨 EXIT ALL positions",
         "",
-        "Type /entry for option suggestion now",
+        "Commands: /entry  /oi  /levels  /regime  /news",
     ]
     return "\n".join(l for l in lines if l is not None)
 
 
 async def format_signal_alert(sig: dict, direction: str, spot: float) -> str:
-    strategy = sig.get("_strategy", "signal").upper().replace("_", " ")
-    ts       = sig.get("bar_time", sig.get("timestamp", ""))
-    conf     = sig.get("confidence", sig.get("score", 75))
-    expiry   = _next_thursday()
+    raw_strat = sig.get("_strategy", "signal").upper().replace("_", " ")
+    strategy  = STRATEGY_DESC.get(raw_strat, raw_strat)
+    ts        = sig.get("bar_time", sig.get("timestamp", ""))
+    conf      = sig.get("confidence", sig.get("score", 75))
+    expiry    = _next_thursday()
 
-    opt      = await suggest_option(direction, spot, expiry)
-    opt_type = opt["opt_type"]
-    strike   = opt["strike"]
-    premium  = opt["premium"]
-    sl       = opt["sl"]
-    target   = opt["target"]
-    lot_sl   = opt["lot_sl"]
+    opt       = await suggest_option(direction, spot, expiry)
+    opt_type  = opt["opt_type"]
+    strike    = opt["strike"]
+    premium   = opt["premium"]
+    sl        = opt["sl"]
+    t1        = opt["t1"]
+    t2        = opt["t2"]
+    lot_sl    = opt["lot_sl"]
+    rr        = opt["rr"]
     exp_short = datetime.strptime(expiry, "%Y-%m-%d").strftime("%d %b")
-
     dir_emoji = "📈" if direction.upper() in ("BULLISH", "LONG") else "📉"
 
     lines = [
-        f"🔔 *NIFTY OPTIONS SIGNAL*",
-        f"",
+        "🔔 *NIFTY OPTIONS SIGNAL*",
+        "",
         f"📐 Strategy: *{strategy}*",
         f"{dir_emoji} Direction: *{direction.upper()}*",
-        f"",
-        f"🎯 *Trade Setup*",
-        f"  Buy: *NIFTY {strike} {opt_type}* ({exp_short})",
-        f"  Entry premium: *₹{premium}–{premium+10}*",
-        f"  🛑 SL: ₹{sl}  (exit if premium drops here)",
-        f"  💰 Target: ₹{target}  (~{round((target/premium-1)*100)}% profit)",
-        f"  📦 1 lot ({50} qty) risk: ~₹{lot_sl}",
-        f"",
-        f"📍 NIFTY Spot: ₹{spot:,.2f}",
-        f"⚡ VIX: {opt['vix']}",
         f"💡 Confidence: {conf:.0f}%",
+        "",
+        "🎯 *Trade Setup*",
+        f"  Buy: *NIFTY {strike} {opt_type}* ({exp_short})",
+        f"  Entry: *₹{premium}–{premium+10}*",
+        f"  🛑 SL: ₹{sl}  ← exit immediately if hit",
+        f"  💰 T1: ₹{t1} (+50%) → book 50%, trail SL to cost",
+        f"  💰 T2: ₹{t2} (+80%) → exit remaining",
+        f"  📦 1 lot (50 qty) max risk: ~₹{lot_sl}",
+        f"  📊 R:R = 1:{rr}",
+        "",
+        f"📍 NIFTY: ₹{spot:,.2f}  |  ⚡ VIX: {opt['vix']}",
     ]
     if ts:
         lines.append(f"⏰ Signal at: {ts}")
     lines += [
-        f"",
-        f"🚨 *INTRADAY — Exit by 3:15 PM*",
+        "",
+        "⚠️ *Rules:*",
+        "  • No averaging down",
+        "  • Max 1–2 lots only",
+        "  • Hard exit 3:15 PM — no overnight",
+        "🚨 *INTRADAY ONLY*",
     ]
     return "\n".join(lines)
 
 
 async def format_entry_suggestion() -> str:
-    """On-demand: give current best option trade."""
-    spot    = await get_nifty_spot()
-    regime  = await get_regime()
-    expiry  = _next_thursday()
+    spot   = await get_nifty_spot()
+    regime = await get_regime()
+    expiry = _next_thursday()
 
     if not spot:
         return "❌ Could not fetch NIFTY spot right now."
 
-    r_name = regime.get("regime", "SIDEWAYS") if regime else "SIDEWAYS"
+    r_name = regime.get("regime",    "SIDEWAYS") if regime else "SIDEWAYS"
     gate   = regime.get("trade_gate", "CAUTION") if regime else "CAUTION"
 
     if gate == "AVOID":
@@ -294,8 +411,10 @@ async def format_entry_suggestion() -> str:
         return (
             f"↔️ *No clear directional bias*\n"
             f"Regime: {r_name}\n\n"
-            f"Wait for ORB breakout (9:30 AM) before entering.\n"
-            f"Enter CE if NIFTY breaks above ORB high, PE if below ORB low."
+            f"Wait for ORB breakout at 9:30 AM:\n"
+            f"  • Break above ORB high → Buy CE\n"
+            f"  • Break below ORB low  → Buy PE\n\n"
+            f"Use /levels to see CPR levels for the day."
         )
 
     opt       = await suggest_option(direction, spot, expiry)
@@ -303,25 +422,133 @@ async def format_entry_suggestion() -> str:
     strike    = opt["strike"]
     premium   = opt["premium"]
     sl        = opt["sl"]
-    target    = opt["target"]
+    t1        = opt["t1"]
+    t2        = opt["t2"]
     lot_sl    = opt["lot_sl"]
+    rr        = opt["rr"]
     exp_short = datetime.strptime(expiry, "%Y-%m-%d").strftime("%d %b")
     dir_emoji = "📈" if direction == "BULLISH" else "📉"
 
     return "\n".join([
-        f"🎯 *Current Option Suggestion*",
-        f"",
+        "🎯 *Current Option Suggestion*",
+        "",
         f"{dir_emoji} *{direction}* | Regime: {r_name}",
-        f"",
+        "",
         f"  Buy: *NIFTY {strike} {opt_type}* ({exp_short})",
         f"  Entry: *₹{premium}–{premium+10}*",
-        f"  SL: ₹{sl}",
-        f"  Target: ₹{target}",
-        f"  1 lot risk: ~₹{lot_sl}",
-        f"",
+        f"  🛑 SL: ₹{sl}  ← exit immediately if hit",
+        f"  💰 T1: ₹{t1} (+50%) → book 50%, trail SL to cost",
+        f"  💰 T2: ₹{t2} (+80%) → exit remaining",
+        f"  📦 1 lot max risk: ~₹{lot_sl}  |  📊 R:R 1:{rr}",
+        "",
         f"📍 Spot: ₹{spot:,.2f}  |  ⚡ VIX: {opt['vix']}",
-        f"🚨 *Intraday — Exit by 3:15 PM*",
+        "",
+        "⚠️ No averaging down. Hard exit 3:15 PM.",
+        "🚨 *Intraday only — no overnight positions*",
     ])
+
+
+async def format_oi_analysis() -> str:
+    spot   = await get_nifty_spot()
+    expiry = _next_thursday()
+    oi     = await get_option_analysis(expiry, spot or 0)
+
+    if not oi:
+        return "❌ Option chain data unavailable right now."
+
+    exp_short = datetime.strptime(expiry, "%Y-%m-%d").strftime("%d %b")
+    pcr       = oi.get("pcr", 0)
+    pcr_bias  = (
+        "🟢 Bullish — PEs dominant, market expects upside"   if pcr > 1.2 else
+        "🔴 Bearish — CEs dominant, market expects downside" if pcr < 0.8 else
+        "⬛ Neutral — balanced OI"
+    )
+
+    lines = [
+        f"📊 *Option Chain Analysis — {exp_short}*",
+        "",
+        f"📍 NIFTY: ₹{spot:,.2f}" if spot else "",
+        "",
+        f"*PCR: {pcr}*",
+        f"  {pcr_bias}",
+    ]
+    if oi.get("ce_wall"):
+        lines += [
+            "",
+            f"🔴 *Resistance — CE Wall: {oi['ce_wall']:,}*",
+            "  Heavy call writing → price expected to stay below this",
+        ]
+    if oi.get("pe_wall"):
+        lines += [
+            "",
+            f"🟢 *Support — PE Wall: {oi['pe_wall']:,}*",
+            "  Heavy put writing → price expected to stay above this",
+        ]
+    if oi.get("max_pain"):
+        lines += [
+            "",
+            f"🎯 *Max Pain: {oi['max_pain']:,}*",
+            "  Price gravitates here as expiry approaches",
+        ]
+    lines += [
+        "",
+        "💡 *How to use:*",
+        "  • PCR > 1.2 → lean CE (bullish)",
+        "  • PCR < 0.8 → lean PE (bearish)",
+        "  • Avoid CE above CE Wall",
+        "  • Avoid PE below PE Wall",
+        "  • Near expiry, price pulls toward Max Pain",
+    ]
+    return "\n".join(l for l in lines if l is not None)
+
+
+async def format_levels() -> str:
+    spot = await get_nifty_spot()
+    prev = await get_prev_ohlc()
+
+    if not prev:
+        return "❌ Could not fetch historical data for CPR levels."
+
+    cpr = calc_cpr(prev["high"], prev["low"], prev["close"])
+    atm = _atm_strike(spot) if spot else "?"
+
+    pos = strategy_hint = ""
+    if spot:
+        if spot > cpr["tc"]:
+            pos           = "🟢 Above TC — Strong bullish momentum"
+            strategy_hint = "Buy CE on dips back to TC level"
+        elif spot > cpr["pivot"]:
+            pos           = "🟡 Between Pivot & TC — Cautiously bullish"
+            strategy_hint = "Wait for breakout above TC before entering CE"
+        elif spot > cpr["bc"]:
+            pos           = "🟠 Between BC & Pivot — Mild bearish pressure"
+            strategy_hint = "Wait for breakdown below BC before entering PE"
+        else:
+            pos           = "🔴 Below BC — Strong bearish momentum"
+            strategy_hint = "Buy PE on pullbacks to BC level"
+
+    lines = [
+        "📐 *Key Levels — Today*",
+        "",
+        f"📍 NIFTY Spot: ₹{spot:,.2f}" if spot else "",
+        f"🎯 ATM Strike: {atm}",
+        "",
+        "*Central Pivot Range (CPR):*",
+        f"  R2:     *{cpr['r2']:,}*",
+        f"  R1:     *{cpr['r1']:,}*",
+        f"  ── TC:  *{cpr['tc']:,}*  (top of CPR)",
+        f"  Pivot:  *{cpr['pivot']:,}*",
+        f"  ── BC:  *{cpr['bc']:,}*  (bottom of CPR)",
+        f"  S1:     *{cpr['s1']:,}*",
+        f"  S2:     *{cpr['s2']:,}*",
+        "",
+        f"*Prev Day ({prev['date']}):*",
+        f"  High: {prev['high']:,.0f}  Low: {prev['low']:,.0f}  Close: {prev['close']:,.0f}",
+        "",
+        pos,
+        f"💡 {strategy_hint}" if strategy_hint else "",
+    ]
+    return "\n".join(l for l in lines if l is not None)
 
 
 def format_exit_reminder(hard: bool = False) -> str:
@@ -330,23 +557,24 @@ def format_exit_reminder(hard: bool = False) -> str:
             "🚨🚨 *3:15 PM — EXIT NOW* 🚨🚨\n\n"
             "Close ALL open NIFTY option positions.\n"
             "Do NOT hold options overnight.\n"
-            "Theta decay accelerates — exit at market if needed."
+            "Theta decay kills premium — exit at market if needed."
         )
     return (
         "⏰ *3:00 PM — Start Exiting*\n\n"
-        "15 minutes to close.\n"
-        "If in profit → book now or trail SL tight.\n"
-        "If at SL → exit immediately, don't hope.\n\n"
-        "Hard exit reminder at 3:15 PM."
+        "15 minutes to hard close.\n"
+        "  • In profit → book now or trail SL tight\n"
+        "  • At SL     → exit immediately, don't hope\n"
+        "  • Break-even → exit, not worth overnight risk\n\n"
+        "🚨 Hard exit reminder at 3:15 PM."
     )
 
 
 async def format_eod_summary() -> str:
-    spot   = await get_nifty_spot()
-    regime = await get_regime()
-    vix    = await get_vix()
-    r_name = regime.get("regime", "UNKNOWN") if regime else "UNKNOWN"
-    emoji  = REGIME_EMOJI.get(r_name, "❓")
+    spot      = await get_nifty_spot()
+    regime    = await get_regime()
+    vix       = await get_vix()
+    r_name    = regime.get("regime", "UNKNOWN") if regime else "UNKNOWN"
+    emoji     = REGIME_EMOJI.get(r_name, "❓")
     exp_short = datetime.strptime(_next_thursday(), "%Y-%m-%d").strftime("%d %b")
 
     return "\n".join([
@@ -359,7 +587,7 @@ async def format_eod_summary() -> str:
         f"📅 Next expiry: {exp_short}",
         "",
         "✅ All positions should be closed.",
-        "📓 Log your trades in the journal.",
+        "📓 Log your trades — entry, exit, P&L, what worked.",
         "🌙 Good night — brief at 9:10 AM tomorrow.",
     ])
 

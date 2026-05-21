@@ -1,24 +1,26 @@
 """
 bot.py — Brainee Trades | NIFTY Options Intraday Bot
 
-Alerts (weekdays only, IST):
-  09:10 — Morning brief: regime, spot, ATM strike, bias
-  09:30 — ORB setup check + CE/PE suggestion
-  09:45, 10:00, 10:30, 11:00, 11:30, 12:00, 12:30, 13:00,
-  13:30, 14:00, 14:30, 15:00 — Signal scan (ORB/VWAP/Supertrend)
-  15:00 — "Start exiting" reminder
+Scheduled alerts (weekdays, IST):
+  09:10 — Morning brief: regime, spot, ATM strike, CPR, OI analysis
+  09:30 — ORB setup check
+  09:45, 10:00 … 15:00 (every 15 min) — Signal scan
+  15:00 — Start exiting reminder
   15:15 — HARD EXIT alert
   15:35 — EOD summary
-  Every 30 min 09:00–15:30 — Important news
+  Every 30 min 09:00–15:30 — Important market news
 
 Commands:
-  /entry   — best option to buy right now
+  /entry   — best CE/PE right now with T1/T2/SL
   /regime  — current market regime
+  /oi      — option chain: PCR, CE wall, PE wall, max pain
+  /levels  — CPR + key support/resistance levels
   /news    — latest market news
   /expiry  — this week's expiry date
   /status  — bot health check
+  /test    — fire a test alert now (anytime)
 
-Env vars required: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+Env vars: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 """
 from __future__ import annotations
 
@@ -41,6 +43,8 @@ from alerts import (
     format_exit_reminder,
     format_eod_summary,
     format_news,
+    format_oi_analysis,
+    format_levels,
     fetch_news,
     get_regime,
     get_nifty_spot,
@@ -105,7 +109,7 @@ async def job_scan() -> None:
         if not spot or not signals:
             return
 
-        r_name = regime.get("regime", "SIDEWAYS") if regime else "SIDEWAYS"
+        r_name    = regime.get("regime", "SIDEWAYS") if regime else "SIDEWAYS"
         direction = (
             "BULLISH" if r_name in ("BULL_TREND", "RECOVERING") else
             "BEARISH" if r_name in ("BEAR_TREND", "WEAKENING") else
@@ -124,8 +128,7 @@ async def job_scan() -> None:
             if conf < 55:
                 continue
 
-            # Determine direction from signal if regime is unclear
-            d = direction or ("BULLISH" if sig.get("side", "").upper() == "LONG" else "BEARISH")
+            d   = direction or ("BULLISH" if sig.get("side", "").upper() == "LONG" else "BEARISH")
             msg = await format_signal_alert(sig, d, spot)
             await _send(msg)
             await asyncio.sleep(1)
@@ -166,15 +169,6 @@ async def cmd_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
 
-async def cmd_test(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("🧪 Running test — sending morning brief + entry suggestion…")
-    brief = await format_morning_brief()
-    await update.message.reply_text(brief, parse_mode=ParseMode.MARKDOWN)
-    await asyncio.sleep(1)
-    entry = await format_entry_suggestion()
-    await update.message.reply_text(entry, parse_mode=ParseMode.MARKDOWN)
-
-
 async def cmd_regime(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     data = await get_regime()
     if not data:
@@ -191,6 +185,20 @@ async def cmd_regime(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+async def cmd_oi(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("📊 Fetching option chain…")
+    msg = await format_oi_analysis()
+    await update.message.reply_text(
+        msg, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True,
+    )
+
+
+async def cmd_levels(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("📐 Calculating levels…")
+    msg = await format_levels()
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+
+
 async def cmd_news(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     articles = fetch_news()
     await update.message.reply_text(
@@ -200,8 +208,7 @@ async def cmd_news(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_expiry(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    from datetime import datetime
-    exp = _next_thursday()
+    exp     = _next_thursday()
     exp_fmt = datetime.strptime(exp, "%Y-%m-%d").strftime("%A, %d %b %Y")
     await update.message.reply_text(
         f"📅 *Next NIFTY Weekly Expiry*\n{exp_fmt}",
@@ -224,6 +231,26 @@ async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+async def cmd_test(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("🧪 Running test — morning brief + entry + levels + OI…")
+    await update.message.reply_text(
+        await format_morning_brief(), parse_mode=ParseMode.MARKDOWN,
+    )
+    await asyncio.sleep(1)
+    await update.message.reply_text(
+        await format_entry_suggestion(), parse_mode=ParseMode.MARKDOWN,
+    )
+    await asyncio.sleep(1)
+    await update.message.reply_text(
+        await format_levels(), parse_mode=ParseMode.MARKDOWN,
+    )
+    await asyncio.sleep(1)
+    await update.message.reply_text(
+        await format_oi_analysis(), parse_mode=ParseMode.MARKDOWN,
+        disable_web_page_preview=True,
+    )
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -231,29 +258,34 @@ def main() -> None:
 
     _app = Application.builder().token(TOKEN).build()
 
-    _app.add_handler(CommandHandler("start",  lambda u, c: u.message.reply_text(
+    _app.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text(
         "🤖 *Brainee Trades — NIFTY Options Bot*\n\n"
         "Commands:\n"
-        "  /entry — best CE/PE to buy right now\n"
-        "  /regime — market regime\n"
-        "  /expiry — this week's expiry\n"
-        "  /news — market news\n"
-        "  /status — bot health\n\n"
+        "  /entry   — best CE/PE right now (T1, T2, SL, R:R)\n"
+        "  /oi      — option chain: PCR, CE wall, PE wall, max pain\n"
+        "  /levels  — CPR pivot levels + key S/R\n"
+        "  /regime  — current market regime\n"
+        "  /expiry  — this week's expiry\n"
+        "  /news    — market news\n"
+        "  /status  — bot health\n"
+        "  /test    — fire a test alert now\n\n"
         "Auto-alerts every 15 min during market hours.",
         parse_mode=ParseMode.MARKDOWN,
     )))
     _app.add_handler(CommandHandler("entry",  cmd_entry))
-    _app.add_handler(CommandHandler("test",   cmd_test))
     _app.add_handler(CommandHandler("regime", cmd_regime))
+    _app.add_handler(CommandHandler("oi",     cmd_oi))
+    _app.add_handler(CommandHandler("levels", cmd_levels))
     _app.add_handler(CommandHandler("news",   cmd_news))
     _app.add_handler(CommandHandler("expiry", cmd_expiry))
     _app.add_handler(CommandHandler("status", cmd_status))
+    _app.add_handler(CommandHandler("test",   cmd_test))
 
-    s = AsyncIOScheduler(timezone=IST)
+    s  = AsyncIOScheduler(timezone=IST)
     wd = "mon-fri"
 
-    s.add_job(job_morning_brief, CronTrigger(day_of_week=wd, hour=9,  minute=10,  timezone=IST))
-    # Signal scans — 9:30 then every 15 min through 3 PM
+    s.add_job(job_morning_brief, CronTrigger(day_of_week=wd, hour=9, minute=10, timezone=IST))
+
     for h in range(9, 16):
         for m in [0, 15, 30, 45]:
             if h == 9 and m < 30:
@@ -265,7 +297,7 @@ def main() -> None:
     s.add_job(job_exit_warning, CronTrigger(day_of_week=wd, hour=15, minute=0,  timezone=IST))
     s.add_job(job_hard_exit,    CronTrigger(day_of_week=wd, hour=15, minute=15, timezone=IST))
     s.add_job(job_eod,          CronTrigger(day_of_week=wd, hour=15, minute=35, timezone=IST))
-    # News every 30 min
+
     for h in range(9, 16):
         for m in [0, 30]:
             s.add_job(job_news, CronTrigger(day_of_week=wd, hour=h, minute=m, timezone=IST))
