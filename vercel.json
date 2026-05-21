@@ -5,16 +5,20 @@
       "src": "api/app.py",
       "use": "@vercel/python",
       "config": { "maxLambdaSize": "60mb", "maxDuration": 60 }
-    }
+    },
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "*.css",      "use": "@vercel/static" },
+    { "src": "*.js",       "use": "@vercel/static" },
+    { "src": "public/**",  "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/app.py" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
+    { "src": "/",         "dest": "/index.html" },
+    { "src": "/(.*)",     "dest": "/$1" }
   ],
   "headers": [
     {
-      "source": "/api/:path*",
+      "source": "/api/(.*)",
       "headers": [
         { "key": "Access-Control-Allow-Origin",  "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
