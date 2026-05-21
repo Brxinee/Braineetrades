@@ -1,0 +1,9 @@
+# Exclude from Vercel build — keeps lambda bundle lean
+strategies/tests/
+backtest/nifty_options/tests/
+backend/tests/
+*.md
+*.ipynb
+render.yaml
+Procfile
+data/cache/
