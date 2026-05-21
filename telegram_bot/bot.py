@@ -1,22 +1,24 @@
 """
-bot.py — Brainee Trades Telegram Alert Bot
+bot.py — Brainee Trades | NIFTY Options Intraday Bot
 
-Schedules:
-  09:10 IST (weekdays) — Morning brief
-  09:30 IST (weekdays) — ORB signal check
-  Every 15 min 09:15–15:15 (weekdays) — Signal scan (all strategies)
-  Every 30 min 09:00–16:00 (weekdays) — News filter
-  15:35 IST (weekdays) — EOD summary
+Alerts (weekdays only, IST):
+  09:10 — Morning brief: regime, spot, ATM strike, bias
+  09:30 — ORB setup check + CE/PE suggestion
+  09:45, 10:00, 10:30, 11:00, 11:30, 12:00, 12:30, 13:00,
+  13:30, 14:00, 14:30, 15:00 — Signal scan (ORB/VWAP/Supertrend)
+  15:00 — "Start exiting" reminder
+  15:15 — HARD EXIT alert
+  15:35 — EOD summary
+  Every 30 min 09:00–15:30 — Important news
 
 Commands:
-  /start   — subscribe to alerts
-  /stop    — unsubscribe
+  /entry   — best option to buy right now
   /regime  — current market regime
-  /signals — run signal scan now
   /news    — latest market news
-  /status  — bot status
+  /expiry  — this week's expiry date
+  /status  — bot health check
 
-Deploy: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID env vars.
+Env vars required: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 """
 from __future__ import annotations
 
@@ -35,12 +37,16 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from alerts import (
     format_morning_brief,
     format_signal_alert,
+    format_entry_suggestion,
+    format_exit_reminder,
     format_eod_summary,
-    fetch_news_sync,
     format_news,
+    fetch_news,
     get_regime,
-    get_signals,
-    STRATEGY_EMOJI,
+    get_nifty_spot,
+    get_nifty_signals,
+    _next_thursday,
+    REGIME_EMOJI,
 )
 
 logging.basicConfig(
@@ -49,18 +55,14 @@ logging.basicConfig(
 )
 log = logging.getLogger("braineebot")
 
-IST = pytz.timezone("Asia/Kolkata")
+IST     = pytz.timezone("Asia/Kolkata")
 TOKEN   = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
-STRATEGIES = ["orb15", "vwap_reversal", "supertrend_ema", "gap_fade", "rsi_divergence"]
-
-_last_signals: set[str] = set()   # deduplicate signal alerts
-_last_news:    set[str] = set()   # deduplicate news alerts
+_last_signals: set[str] = set()
+_last_news:    set[str] = set()
 _app: Application | None = None
 
-
-# ─── helpers ──────────────────────────────────────────────────────────────────
 
 def _is_market_hours() -> bool:
     now = datetime.now(IST)
@@ -70,12 +72,12 @@ def _is_market_hours() -> bool:
     return dtime(9, 15) <= t <= dtime(15, 30)
 
 
-async def _send(text: str, chat_id: str = CHAT_ID) -> None:
-    if _app is None:
+async def _send(text: str) -> None:
+    if not _app or not text:
         return
     try:
         await _app.bot.send_message(
-            chat_id=chat_id,
+            chat_id=CHAT_ID,
             text=text,
             parse_mode=ParseMode.MARKDOWN,
             disable_web_page_preview=True,
@@ -84,156 +86,182 @@ async def _send(text: str, chat_id: str = CHAT_ID) -> None:
         log.error("Telegram send failed: %s", e)
 
 
-# ─── scheduled jobs ───────────────────────────────────────────────────────────
+# ── scheduled jobs ────────────────────────────────────────────────────────────
 
 async def job_morning_brief() -> None:
-    log.info("Running morning brief")
-    msg = await format_morning_brief()
-    await _send(msg)
+    log.info("Morning brief")
+    await _send(await format_morning_brief())
 
 
-async def job_scan_signals() -> None:
+async def job_scan() -> None:
     if not _is_market_hours():
         return
-    log.info("Running signal scan")
-    for strategy in STRATEGIES:
-        try:
-            signals = await get_signals(strategy)
-            for sig in signals:
-                key = f"{strategy}:{sig.get('symbol')}:{sig.get('bar_time', sig.get('timestamp', ''))}"
-                if key in _last_signals:
-                    continue
-                _last_signals.add(key)
-                # Keep cache bounded
-                if len(_last_signals) > 500:
-                    _last_signals.clear()
-                conf = sig.get("confidence", sig.get("score", 0))
-                if conf < 60:
-                    continue
-                msg = await format_signal_alert(sig, strategy)
-                await _send(msg)
-                await asyncio.sleep(1)
-        except Exception as e:
-            log.warning("Signal scan error (%s): %s", strategy, e)
+    log.info("Signal scan")
+    try:
+        spot    = await get_nifty_spot()
+        regime  = await get_regime()
+        signals = await get_nifty_signals()
+
+        if not spot or not signals:
+            return
+
+        r_name = regime.get("regime", "SIDEWAYS") if regime else "SIDEWAYS"
+        direction = (
+            "BULLISH" if r_name in ("BULL_TREND", "RECOVERING") else
+            "BEARISH" if r_name in ("BEAR_TREND", "WEAKENING") else
+            None
+        )
+
+        for sig in signals[:2]:
+            key = f"{sig.get('_strategy')}:{sig.get('bar_time', sig.get('timestamp', ''))}"
+            if key in _last_signals:
+                continue
+            _last_signals.add(key)
+            if len(_last_signals) > 200:
+                _last_signals.clear()
+
+            conf = sig.get("confidence", sig.get("score", 0))
+            if conf < 55:
+                continue
+
+            # Determine direction from signal if regime is unclear
+            d = direction or ("BULLISH" if sig.get("side", "").upper() == "LONG" else "BEARISH")
+            msg = await format_signal_alert(sig, d, spot)
+            await _send(msg)
+            await asyncio.sleep(1)
+
+    except Exception as e:
+        log.warning("Scan error: %s", e)
+
+
+async def job_exit_warning() -> None:
+    await _send(format_exit_reminder(hard=False))
+
+
+async def job_hard_exit() -> None:
+    await _send(format_exit_reminder(hard=True))
+
+
+async def job_eod() -> None:
+    await _send(await format_eod_summary())
 
 
 async def job_news() -> None:
-    log.info("Running news check")
-    articles = fetch_news_sync()
-    new_articles = [a for a in articles if a["title"] not in _last_news]
-    if not new_articles:
+    articles = fetch_news()
+    new = [a for a in articles if a["title"] not in _last_news]
+    if not new:
         return
-    for a in new_articles:
+    for a in new:
         _last_news.add(a["title"])
-    if len(_last_news) > 200:
+    if len(_last_news) > 300:
         _last_news.clear()
-    msg = format_news(new_articles)
-    await _send(msg)
+    await _send(format_news(new))
 
 
-async def job_eod_summary() -> None:
-    log.info("Running EOD summary")
-    msg = await format_eod_summary()
-    await _send(msg)
+# ── command handlers ──────────────────────────────────────────────────────────
 
-
-# ─── command handlers ─────────────────────────────────────────────────────────
-
-async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
-        "🤖 *Brainee Trades Bot active!*\n\n"
-        "You'll receive:\n"
-        "  🌅 Morning brief at 9:10 AM\n"
-        "  🔔 Entry signals every 15 min\n"
-        "  📰 Important news every 30 min\n"
-        "  🌆 EOD summary at 3:35 PM\n\n"
-        "Commands: /regime /signals /news /status",
-        parse_mode=ParseMode.MARKDOWN,
-    )
+async def cmd_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("🔍 Analysing current conditions…")
+    msg = await format_entry_suggestion()
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
 
 async def cmd_regime(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     data = await get_regime()
     if not data:
-        await update.message.reply_text("❌ Could not fetch regime right now.")
+        await update.message.reply_text("❌ Could not fetch regime.")
         return
-    regime = data.get("regime", "UNKNOWN")
-    conf   = data.get("confidence", 0)
-    gate   = data.get("trade_gate", "?")
-    gate_emoji = {"TRADE": "✅", "CAUTION": "⚠️", "AVOID": "🚫"}.get(gate, "❓")
+    r  = data.get("regime", "UNKNOWN")
+    c  = data.get("confidence", 0)
+    g  = data.get("trade_gate", "?")
+    em = REGIME_EMOJI.get(r, "❓")
+    ge = {"TRADE": "✅", "CAUTION": "⚠️", "AVOID": "🚫"}.get(g, "❓")
     await update.message.reply_text(
-        f"📊 *Current Market Regime*\n\n"
-        f"*{regime}*  ({conf:.0f}% confidence)\n"
-        f"{gate_emoji} Trade gate: *{gate}*",
+        f"{em} *Regime: {r}*  ({c:.0f}%)\n{ge} Trade gate: *{g}*",
         parse_mode=ParseMode.MARKDOWN,
     )
-
-
-async def cmd_signals(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("🔍 Scanning signals across all strategies…")
-    found = False
-    for strategy in STRATEGIES:
-        signals = await get_signals(strategy)
-        for sig in signals[:2]:
-            msg = await format_signal_alert(sig, strategy)
-            await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
-            found = True
-            await asyncio.sleep(0.5)
-    if not found:
-        await update.message.reply_text("😴 No active signals right now. Check back during market hours.")
 
 
 async def cmd_news(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    articles = fetch_news_sync()
-    msg = format_news(articles)
-    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
-
-
-async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    now = datetime.now(IST).strftime("%d %b %Y, %I:%M %p IST")
-    market = "🟢 OPEN" if _is_market_hours() else "🔴 CLOSED"
+    articles = fetch_news()
     await update.message.reply_text(
-        f"✅ *Bot is running*\n\n"
-        f"🕐 Time: {now}\n"
-        f"📈 Market: {market}\n"
-        f"🔔 Signals tracked: {len(_last_signals)}\n"
-        f"📰 News seen: {len(_last_news)}",
+        format_news(articles), parse_mode=ParseMode.MARKDOWN,
+        disable_web_page_preview=True,
+    )
+
+
+async def cmd_expiry(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    from datetime import datetime
+    exp = _next_thursday()
+    exp_fmt = datetime.strptime(exp, "%Y-%m-%d").strftime("%A, %d %b %Y")
+    await update.message.reply_text(
+        f"📅 *Next NIFTY Weekly Expiry*\n{exp_fmt}",
         parse_mode=ParseMode.MARKDOWN,
     )
 
 
-# ─── main ─────────────────────────────────────────────────────────────────────
+async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    now    = datetime.now(IST).strftime("%d %b, %I:%M %p IST")
+    market = "🟢 OPEN" if _is_market_hours() else "🔴 CLOSED"
+    spot   = await get_nifty_spot()
+    spot_s = f"₹{spot:,.2f}" if spot else "N/A"
+    await update.message.reply_text(
+        f"✅ *Bot running*\n\n"
+        f"🕐 {now}\n"
+        f"📈 Market: {market}\n"
+        f"📍 NIFTY: {spot_s}\n"
+        f"📅 Expiry: {_next_thursday()}",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+# ── main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     global _app
 
-    _app = (
-        Application.builder()
-        .token(TOKEN)
-        .build()
-    )
+    _app = Application.builder().token(TOKEN).build()
 
-    _app.add_handler(CommandHandler("start",   cmd_start))
-    _app.add_handler(CommandHandler("regime",  cmd_regime))
-    _app.add_handler(CommandHandler("signals", cmd_signals))
-    _app.add_handler(CommandHandler("news",    cmd_news))
-    _app.add_handler(CommandHandler("status",  cmd_status))
+    _app.add_handler(CommandHandler("start",  lambda u, c: u.message.reply_text(
+        "🤖 *Brainee Trades — NIFTY Options Bot*\n\n"
+        "Commands:\n"
+        "  /entry — best CE/PE to buy right now\n"
+        "  /regime — market regime\n"
+        "  /expiry — this week's expiry\n"
+        "  /news — market news\n"
+        "  /status — bot health\n\n"
+        "Auto-alerts every 15 min during market hours.",
+        parse_mode=ParseMode.MARKDOWN,
+    )))
+    _app.add_handler(CommandHandler("entry",  cmd_entry))
+    _app.add_handler(CommandHandler("regime", cmd_regime))
+    _app.add_handler(CommandHandler("news",   cmd_news))
+    _app.add_handler(CommandHandler("expiry", cmd_expiry))
+    _app.add_handler(CommandHandler("status", cmd_status))
 
-    scheduler = AsyncIOScheduler(timezone=IST)
+    s = AsyncIOScheduler(timezone=IST)
+    wd = "mon-fri"
 
-    # Morning brief — 9:10 AM IST, Mon–Fri
-    scheduler.add_job(job_morning_brief, CronTrigger(day_of_week="mon-fri", hour=9,  minute=10, timezone=IST))
-    # ORB signal check — 9:30 AM IST, Mon–Fri
-    scheduler.add_job(job_scan_signals,  CronTrigger(day_of_week="mon-fri", hour=9,  minute=30, timezone=IST))
-    # Signal scan every 15 min during market hours — Mon–Fri
-    scheduler.add_job(job_scan_signals,  CronTrigger(day_of_week="mon-fri", hour="9-15", minute="0,15,30,45", timezone=IST))
-    # News every 30 min — Mon–Fri
-    scheduler.add_job(job_news,          CronTrigger(day_of_week="mon-fri", hour="9-16", minute="0,30", timezone=IST))
-    # EOD summary — 3:35 PM IST, Mon–Fri
-    scheduler.add_job(job_eod_summary,   CronTrigger(day_of_week="mon-fri", hour=15, minute=35, timezone=IST))
+    s.add_job(job_morning_brief, CronTrigger(day_of_week=wd, hour=9,  minute=10,  timezone=IST))
+    # Signal scans — 9:30 then every 15 min through 3 PM
+    for h in range(9, 16):
+        for m in [0, 15, 30, 45]:
+            if h == 9 and m < 30:
+                continue
+            if h == 15 and m > 0:
+                continue
+            s.add_job(job_scan, CronTrigger(day_of_week=wd, hour=h, minute=m, timezone=IST))
 
-    scheduler.start()
-    log.info("Brainee Trades Bot starting (polling mode)")
+    s.add_job(job_exit_warning, CronTrigger(day_of_week=wd, hour=15, minute=0,  timezone=IST))
+    s.add_job(job_hard_exit,    CronTrigger(day_of_week=wd, hour=15, minute=15, timezone=IST))
+    s.add_job(job_eod,          CronTrigger(day_of_week=wd, hour=15, minute=35, timezone=IST))
+    # News every 30 min
+    for h in range(9, 16):
+        for m in [0, 30]:
+            s.add_job(job_news, CronTrigger(day_of_week=wd, hour=h, minute=m, timezone=IST))
+
+    s.start()
+    log.info("Brainee Trades NIFTY Options Bot started")
     _app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
