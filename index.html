@@ -1,1155 +1,1026 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Nifty 50 intraday trading research — strategy backtests, live signals, trade journal.">
-<title>Brainee Trades</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@900&family=DM+Sans:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
-<style>
-/* ── Variables ───────────────────────────────────────────────────────────── */
-:root {
-  --bg:     #080808;
-  --bg2:    #111;
-  --bg3:    #181818;
-  --green:  #B8FF57;
-  --red:    #FF4D4D;
-  --text:   #E2E2E2;
-  --muted:  #4A4A4A;
-  --border: #1E1E1E;
-  --fh:     'Barlow Condensed', sans-serif;
-  --fb:     'DM Sans', sans-serif;
-}
-/* ── Reset ───────────────────────────────────────────────────────────────── */
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:var(--fb);font-size:14px;min-height:100vh;-webkit-font-smoothing:antialiased}
-button{cursor:pointer;font-family:inherit}
-/* ── Header ──────────────────────────────────────────────────────────────── */
-header{position:sticky;top:0;z-index:100;background:rgba(8,8,8,.96);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:24px;padding:0 24px;height:52px}
-.logo{font-family:var(--fh);font-size:20px;color:var(--green);letter-spacing:.05em;white-space:nowrap;flex-shrink:0}
-nav{display:flex;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch}
-nav::-webkit-scrollbar{display:none}
-.tab{background:none;border:none;color:var(--muted);font-family:var(--fh);font-size:14px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;padding:7px 14px;border-radius:4px;transition:color .15s,background .15s;white-space:nowrap}
-.tab:hover{color:var(--text)}
-.tab.active{color:var(--green);background:rgba(184,255,87,.08)}
-/* ── Layout ──────────────────────────────────────────────────────────────── */
-main{max-width:1160px;margin:0 auto;padding:28px 24px 60px}
-.pane{display:none}.pane.active{display:block}
-/* ── Page title ──────────────────────────────────────────────────────────── */
-.ptitle{font-family:var(--fh);font-size:48px;font-weight:900;color:var(--green);letter-spacing:.02em;line-height:1;margin-bottom:4px}
-.psub{color:var(--muted);font-size:12px;margin-bottom:24px}
-/* ── Table ───────────────────────────────────────────────────────────────── */
-.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
-table{width:100%;border-collapse:collapse}
-thead th{background:var(--bg2);color:var(--muted);font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;padding:10px 16px;text-align:right;white-space:nowrap}
-thead th:first-child{text-align:left}
-tbody tr{border-top:1px solid var(--border);cursor:pointer;transition:background .1s}
-tbody tr:hover{background:var(--bg2)}
-tbody tr.sel{background:rgba(184,255,87,.04)}
-tbody tr.sel td:first-child{border-left:2px solid var(--green)}
-td{padding:13px 16px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;line-height:1.3}
-td:first-child{text-align:left}
-.sname{font-family:var(--fh);font-size:18px;font-weight:900;letter-spacing:.03em;display:block}
-.sdesc{font-size:11px;color:var(--muted);margin-top:2px}
-.badge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;font-size:10px;background:var(--bg3);color:var(--muted);margin-right:6px;flex-shrink:0}
-.badge.no1{background:var(--green);color:#000}
-/* ── Skeleton ────────────────────────────────────────────────────────────── */
-@keyframes sk{0%{background-position:-600px 0}100%{background-position:600px 0}}
-.sk{background:linear-gradient(90deg,var(--bg2) 25%,var(--bg3) 50%,var(--bg2) 75%);background-size:1200px 100%;animation:sk 1.5s infinite;border-radius:3px;display:inline-block}
-/* ── Colors ──────────────────────────────────────────────────────────────── */
-.pos{color:var(--green)}.neg{color:var(--red)}.dim{color:var(--muted)}
-/* ── Drawer ──────────────────────────────────────────────────────────────── */
-.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200}
-.overlay.on{display:block}
-.drawer{position:fixed;top:0;right:-720px;width:min(720px,100vw);height:100vh;background:var(--bg2);border-left:1px solid var(--border);z-index:201;overflow-y:auto;transition:right .28s cubic-bezier(.4,0,.2,1);padding:24px 28px 48px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
-.drawer.on{right:0}
-.drawer::-webkit-scrollbar{width:4px}
-.drawer::-webkit-scrollbar-thumb{background:var(--border)}
-.dclose{float:right;background:none;border:1px solid var(--border);color:var(--muted);padding:3px 10px;border-radius:4px;font-size:16px;line-height:1.4;transition:color .15s}
-.dclose:hover{color:var(--text)}
-.dtitle{font-family:var(--fh);font-size:36px;font-weight:900;color:var(--green);letter-spacing:.02em;clear:right;margin-bottom:2px}
-.dsub{font-size:11px;color:var(--muted);margin-bottom:20px}
-/* ── Metric cards ────────────────────────────────────────────────────────── */
-.mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:24px}
-.mcard{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:12px 14px}
-.mlabel{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
-.mval{font-family:var(--fh);font-size:28px;font-weight:900;line-height:1}
-/* ── Section heading ─────────────────────────────────────────────────────── */
-.sh{font-family:var(--fh);font-size:12px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:24px 0 10px;display:flex;align-items:center;gap:8px}
-.sh::after{content:'';flex:1;height:1px;background:var(--border)}
-/* ── Chart container ─────────────────────────────────────────────────────── */
-#dchart{min-height:160px;border-radius:6px;overflow:hidden}
-.uplot .u-legend{display:none}
-/* ── Symbol grid ─────────────────────────────────────────────────────────── */
-.sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
-.scard{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 12px}
-.scard .sym{font-family:var(--fh);font-size:14px;font-weight:900}
-.scard .spnl{font-size:13px;margin-top:4px;font-variant-numeric:tabular-nums}
-.scard .smeta{font-size:10px;color:var(--muted);margin-top:2px}
-/* ── Trade log ───────────────────────────────────────────────────────────── */
-.tlog{width:100%;border-collapse:collapse;font-size:12px}
-.tlog th{color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap}
-.tlog th:first-child{text-align:left}
-.tlog td{padding:7px 10px;text-align:right;border-bottom:1px solid rgba(30,30,30,.6);font-variant-numeric:tabular-nums}
-.tlog td:first-child{text-align:left;color:var(--muted)}
-/* ── Empty / coming soon ─────────────────────────────────────────────────── */
-.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:320px;gap:12px}
-.empty-h{font-family:var(--fh);font-size:56px;font-weight:900;color:var(--bg3);letter-spacing:.02em}
-.empty-s{color:var(--muted);font-size:13px}
-/* ── Scanner ─────────────────────────────────────────────────────────────── */
-.sc-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:22px}
-.sc-status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);min-width:130px}
-.sc-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .3s,box-shadow .3s}
-.sc-dot.open{background:var(--green);box-shadow:0 0 7px var(--green)}
-.sc-select{background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:var(--fb);font-size:13px;padding:8px 12px;border-radius:6px;outline:none;-webkit-appearance:none;appearance:none;padding-right:28px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234A4A4A'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
-.sc-select:focus{border-color:var(--green)}
-.sc-run-btn{background:var(--green);color:#000;border:none;font-family:var(--fh);font-size:16px;font-weight:900;letter-spacing:.06em;padding:9px 26px;border-radius:6px;transition:opacity .15s,transform .1s;white-space:nowrap}
-.sc-run-btn:hover:not(:disabled){opacity:.88}
-.sc-run-btn:active:not(:disabled){transform:scale(.97)}
-.sc-run-btn:disabled{opacity:.4;cursor:not-allowed}
-.sc-info{font-size:11px;color:var(--muted);margin-left:auto;text-align:right;white-space:nowrap}
-/* Market closed banner */
-.sc-closed{text-align:center;padding:56px 20px;border:1px solid var(--border);border-radius:8px;margin-bottom:24px}
-.sc-closed-icon{font-size:36px;margin-bottom:14px;opacity:.4}
-.sc-closed-title{font-family:var(--fh);font-size:30px;font-weight:900;letter-spacing:.06em;color:var(--muted)}
-.sc-closed-sub{font-size:12px;color:var(--muted);margin-top:6px}
-/* Signal cards */
-.sig-grid{display:flex;flex-direction:column;gap:10px}
-.sig-card{background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--green);border-radius:8px;padding:16px 18px}
-.sig-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.sig-sym{font-family:var(--fh);font-size:24px;font-weight:900;letter-spacing:.02em;line-height:1}
-.sig-meta{font-size:11px;color:var(--muted);margin-top:3px}
-.sig-ltp{text-align:right;flex-shrink:0}
-.sig-price{font-family:var(--fh);font-size:24px;font-weight:900;line-height:1}
-.sig-prices{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
-.sig-p{background:var(--bg3);border-radius:5px;padding:9px 11px}
-.sig-p .lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
-.sig-p .val{font-family:var(--fh);font-size:19px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
-.sig-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
-.sig-badge{font-family:var(--fh);font-size:11px;font-weight:900;letter-spacing:.08em;padding:3px 9px;border-radius:3px;background:rgba(184,255,87,.1);color:var(--green)}
-.sig-time{font-size:11px;color:var(--muted)}
-.log-btn{margin-left:auto;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;padding:4px 14px;border-radius:4px;transition:border-color .15s,color .15s}
-.log-btn:hover{border-color:var(--green);color:var(--green)}
-/* No signals */
-.no-sig{text-align:center;padding:56px 0;color:var(--muted)}
-.no-sig-h{font-family:var(--fh);font-size:30px;font-weight:900;color:var(--bg3);margin-bottom:8px;letter-spacing:.04em}
-/* Toast */
-.toast{position:fixed;bottom:24px;right:24px;background:var(--bg2);border:1px solid var(--green);color:var(--text);font-size:13px;padding:12px 18px;border-radius:6px;z-index:500;opacity:0;transform:translateY(10px);transition:opacity .2s,transform .2s;pointer-events:none;max-width:320px}
-.toast.show{opacity:1;transform:translateY(0)}
-/* ── Journal ─────────────────────────────────────────────────────────────── */
-.jnl-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
-.jnl-export-btn{margin-left:auto;background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;padding:6px 14px;border-radius:4px;transition:border-color .15s,color .15s;white-space:nowrap}
-.jnl-export-btn:hover{border-color:var(--green);color:var(--green)}
-.jnl-cancel-btn{background:none;border:1px solid var(--border);color:var(--muted);font-size:14px;padding:9px 20px;border-radius:6px;margin-left:10px;transition:color .15s,border-color .15s}
-.jnl-cancel-btn:hover{color:var(--text);border-color:var(--text)}
-.jnl-actions{display:flex;gap:4px;justify-content:flex-end}
-.jnl-del,.jnl-edit{background:none;border:none;font-size:13px;padding:3px 7px;border-radius:3px;cursor:pointer;transition:color .15s}
-.jnl-del{color:var(--muted)}.jnl-del:hover{color:var(--red)}
-.jnl-edit{color:var(--muted)}.jnl-edit:hover{color:var(--green)}
-.jnl-open{color:var(--muted);font-style:italic;font-size:11px}
-.jnl-empty{text-align:center;padding:56px 0;color:var(--muted)}
-.jnl-empty-h{font-family:var(--fh);font-size:30px;font-weight:900;color:var(--bg3);margin-bottom:8px;letter-spacing:.04em}
-/* ── Backtest Lab ────────────────────────────────────────────────────────── */
-.bt-form{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px 22px;margin-bottom:24px}
-.bt-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:12px}
-.bt-field{display:flex;flex-direction:column;gap:5px}
-.bt-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-.bt-input{background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--fb);font-size:13px;padding:8px 12px;border-radius:6px;outline:none;width:100%;-webkit-appearance:none}
-.bt-input:focus{border-color:var(--green)}
-.bt-input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.4)}
-.bt-sym-row{margin-bottom:14px}
-.bt-note{font-size:11px;color:var(--muted);margin-top:10px}
-.bt-loading{text-align:center;padding:64px 0;display:none}
-.bt-loading-h{font-family:var(--fh);font-size:28px;font-weight:900;color:var(--muted);letter-spacing:.04em;margin-bottom:8px}
-.bt-loading-sub{font-size:12px;color:var(--muted)}
-.bt-results{display:none}
-.bt-exit-grid{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-.bt-exit-pill{background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:5px 14px;display:flex;align-items:baseline;gap:5px}
-.bep-n{font-family:var(--fh);font-size:20px;font-weight:900}
-.bep-l{font-size:11px;color:var(--muted)}
-#bt-chart{min-height:160px;border-radius:6px;overflow:hidden}
-/* ── Responsive ──────────────────────────────────────────────────────────── */
-@media(max-width:640px){
-  header{padding:0 14px;gap:12px}
-  .tab{font-size:12px;padding:6px 10px}
-  main{padding:18px 14px 60px}
-  .ptitle{font-size:32px}
-  .mgrid{grid-template-columns:repeat(2,1fr)}
-  .drawer{padding:18px 16px 48px}
-  .dtitle{font-size:28px}
-  .sc-info{display:none}
-  .sig-prices{grid-template-columns:repeat(2,1fr)}
-  .sig-sym,.sig-price{font-size:20px}
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>BRAINEE TRADES — Execution Cockpit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;900&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<header>
-  <div class="logo">BRAINEE TRADES</div>
-  <nav>
-    <button class="tab active" data-tab="strategies">Strategies</button>
-    <button class="tab" data-tab="scanner">Live Scanner</button>
-    <button class="tab" data-tab="backtest">Backtest Lab</button>
-    <button class="tab" data-tab="journal">Journal</button>
-  </nav>
+<!-- ═══════════════════════════════════════════════════════════════
+     TOP BAR (fixed)
+═══════════════════════════════════════════════════════════════ -->
+<header class="topbar" role="banner">
+  <div class="topbar-left">
+    <a href="#dashboard" class="logo" aria-label="BRAINEE TRADES — Home">
+      <span class="logo-main">BRAINEE</span><span class="logo-sub">TRADES</span>
+    </a>
+  </div>
+
+  <div class="topbar-center" aria-live="polite" aria-label="Market status and NIFTY price">
+    <span id="market-status-dot" class="market-dot market-dot--closed" aria-hidden="true"></span>
+    <span id="market-status-label" class="market-status-label">MARKET CLOSED</span>
+    <span class="divider" aria-hidden="true">|</span>
+    <span class="topbar-index">NIFTY</span>
+    <span id="nifty-ltp" class="topbar-price">—</span>
+    <span id="nifty-chg" class="topbar-change">—</span>
+    <span class="divider hidden-mobile" aria-hidden="true">|</span>
+    <span id="topbar-timestamp" class="topbar-ts hidden-mobile">—</span>
+  </div>
+
+  <div class="topbar-right">
+    <span id="regime-badge" class="regime-badge" title="Current market regime">—</span>
+    <span class="topbar-vix hidden-mobile">VIX: <strong id="topbar-vix-val">—</strong></span>
+    <nav class="desktop-nav" aria-label="Primary navigation">
+      <a href="#dashboard"    class="nav-link" data-screen="dashboard">Dashboard</a>
+      <a href="#scanner"      class="nav-link" data-screen="scanner">Scanner</a>
+      <a href="#options"      class="nav-link" data-screen="options">Options</a>
+      <a href="#risk"         class="nav-link" data-screen="risk">Risk</a>
+      <a href="#journal"      class="nav-link" data-screen="journal">Journal</a>
+      <a href="#analytics"    class="nav-link" data-screen="analytics">Analytics</a>
+      <a href="#settings"     class="nav-link" data-screen="settings">Settings</a>
+    </nav>
+  </div>
 </header>
 
-<main>
+<!-- ═══════════════════════════════════════════════════════════════
+     MAIN CONTENT AREA
+═══════════════════════════════════════════════════════════════ -->
+<main id="app" class="app-main" role="main">
 
-  <!-- ── TAB 1: STRATEGIES ──────────────────────────────────────────────── -->
-  <section class="pane active" id="pane-strategies">
-    <div class="ptitle">STRATEGIES</div>
-    <div class="psub" id="lb-ts">Loading…</div>
-    <div class="tbl-wrap">
-      <table>
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 1 — DASHBOARD (Command Center)
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-dashboard" class="screen screen--active" aria-label="Command Center Dashboard">
+
+    <!-- Metric tiles row -->
+    <div class="metrics-row">
+      <article class="metric-tile" aria-label="NIFTY 50 live price">
+        <div class="metric-tile__label">NIFTY 50</div>
+        <div class="metric-tile__value" id="dash-nifty-ltp">—</div>
+        <div class="metric-tile__sub" id="dash-nifty-chg">—</div>
+      </article>
+      <article class="metric-tile" aria-label="BANKNIFTY live price">
+        <div class="metric-tile__label">BANKNIFTY</div>
+        <div class="metric-tile__value" id="dash-bnf-ltp">—</div>
+        <div class="metric-tile__sub" id="dash-bnf-chg">—</div>
+      </article>
+      <article class="metric-tile metric-tile--vix" aria-label="India VIX">
+        <div class="metric-tile__label">INDIA VIX</div>
+        <div class="metric-tile__value" id="dash-vix">—</div>
+        <div class="metric-tile__sub" id="dash-vix-regime">—</div>
+      </article>
+      <article class="metric-tile" aria-label="Market breadth score">
+        <div class="metric-tile__label">BREADTH</div>
+        <div class="metric-tile__value" id="dash-breadth">—</div>
+        <div class="metric-tile__sub" id="dash-adv-dec">A/D —/—</div>
+      </article>
+    </div>
+
+    <!-- Regime panel -->
+    <div class="regime-panel" aria-label="Current regime analysis">
+      <div class="regime-panel__main">
+        <div class="regime-panel__label">CURRENT REGIME</div>
+        <div id="regime-name" class="regime-panel__name">LOADING…</div>
+        <div class="regime-panel__row">
+          <div class="regime-badge-lg" id="regime-gate-badge">GATE: —</div>
+          <div class="regime-badge-lg regime-badge-lg--vix" id="regime-vix-badge">VIX: —</div>
+          <div class="regime-badge-lg regime-badge-lg--gap" id="regime-gap-badge">GAP: —</div>
+        </div>
+      </div>
+      <div class="regime-panel__strategies">
+        <div class="regime-panel__strat-label">COMPATIBLE STRATEGIES</div>
+        <ul id="regime-strategies" class="strategy-list" aria-label="Compatible strategies for current regime">
+          <li class="strategy-list__item strategy-list__item--loading">Loading regime data…</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Live Signals -->
+    <div class="section-header">
+      <h2 class="section-title">LIVE SIGNALS</h2>
+      <span id="signals-last-scan" class="section-meta">Last scan: —</span>
+    </div>
+    <div id="dash-signals-grid" class="signals-grid" aria-label="Live signals">
+      <div class="empty-state">
+        <div class="empty-state__icon" aria-hidden="true">⚡</div>
+        <div class="empty-state__text">No signals active. Run scanner to detect setups.</div>
+        <a href="#scanner" class="btn btn-accent">Open Scanner</a>
+      </div>
+    </div>
+
+    <!-- Market Internals -->
+    <div class="section-header">
+      <h2 class="section-title">MARKET INTERNALS</h2>
+    </div>
+    <div class="internals-panel">
+      <div class="adv-dec-bar-wrap" aria-label="Advance/Decline bar">
+        <span class="adv-dec-bar__label">ADV <span id="adv-count">—</span></span>
+        <div class="adv-dec-bar" role="progressbar" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100">
+          <div id="adv-bar-fill" class="adv-dec-bar__fill" style="width:50%"></div>
+        </div>
+        <span class="adv-dec-bar__label">DEC <span id="dec-count">—</span></span>
+      </div>
+      <div class="sector-table-wrap">
+        <table class="data-table" aria-label="Sector strength table">
+          <thead>
+            <tr><th>Sector</th><th>Chg%</th><th>Strength</th></tr>
+          </thead>
+          <tbody id="sector-strength-tbody">
+            <tr><td colspan="3" class="table-loading">Loading sector data…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Quick Actions (sticky) -->
+    <div class="quick-actions" role="group" aria-label="Quick actions">
+      <a href="#scanner" class="btn btn-accent">⚡ Scan Now</a>
+      <a href="#risk"    class="btn btn-secondary">📐 Calculate Risk</a>
+      <a href="#journal" class="btn btn-secondary">📓 Log Trade</a>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 2 — SCANNER (Live Signal Scanner)
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-scanner" class="screen" aria-label="Live Signal Scanner">
+    <div class="screen-header">
+      <h1 class="screen-title">LIVE SCANNER</h1>
+    </div>
+
+    <div class="scanner-controls">
+      <div class="form-group">
+        <label class="form-label" for="scanner-strategy">Strategy</label>
+        <select id="scanner-strategy" class="form-select" aria-label="Select strategy to scan">
+          <option value="orb">Opening Range Breakout (ORB)</option>
+          <option value="vwap_reclaim">VWAP Reclaim / Rejection</option>
+          <option value="ema_cross">EMA Crossover (9/21)</option>
+          <option value="gap_fade">Gap Fade</option>
+          <option value="momentum_burst">Momentum Burst</option>
+          <option value="inside_bar">Inside Bar Breakout</option>
+          <option value="reversal_hammer">Reversal Hammer / Shooting Star</option>
+        </select>
+      </div>
+      <div id="scanner-strategy-desc" class="strategy-desc" aria-live="polite">
+        Select a strategy to see its description and entry logic.
+      </div>
+    </div>
+
+    <div class="scanner-actions" role="group" aria-label="Scanner controls">
+      <button id="scan-now-btn" class="btn btn-accent" aria-label="Run scanner now">
+        <span class="btn-icon" aria-hidden="true">⚡</span> Scan Now
+      </button>
+      <label class="toggle-label" for="auto-refresh-toggle">
+        <input type="checkbox" id="auto-refresh-toggle" role="switch" aria-checked="false">
+        <span class="toggle-text">Auto-refresh 30s</span>
+      </label>
+      <span id="scanner-last-scan" class="section-meta" aria-live="polite">Last scan: —</span>
+    </div>
+
+    <div id="regime-compat-warning" class="compat-warning" role="alert" style="display:none">
+      <span aria-hidden="true">⚠️</span>
+      <span id="regime-compat-text">This strategy may be incompatible with the current regime.</span>
+    </div>
+
+    <div id="scanner-signals-grid" class="signals-grid" aria-label="Scanner results">
+      <div class="empty-state">
+        <div class="empty-state__icon" aria-hidden="true">🔍</div>
+        <div class="empty-state__text">Press Scan Now to detect live setups.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 3 — SIGNALS HISTORY
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-signals" class="screen" aria-label="All Signals History">
+    <div class="screen-header">
+      <h1 class="screen-title">SIGNAL HISTORY</h1>
+    </div>
+
+    <div class="filter-bar" role="search" aria-label="Filter signals">
+      <select id="sig-filter-strategy" class="form-select form-select--sm" aria-label="Filter by strategy">
+        <option value="">All Strategies</option>
+        <option value="orb">ORB</option>
+        <option value="vwap_reclaim">VWAP Reclaim</option>
+        <option value="ema_cross">EMA Cross</option>
+        <option value="gap_fade">Gap Fade</option>
+        <option value="momentum_burst">Momentum Burst</option>
+      </select>
+      <select id="sig-filter-dir" class="form-select form-select--sm" aria-label="Filter by direction">
+        <option value="">All Directions</option>
+        <option value="LONG">LONG (CE)</option>
+        <option value="SHORT">SHORT (PE)</option>
+      </select>
+      <div class="form-group form-group--inline">
+        <label class="form-label" for="sig-filter-conf">Min Confidence</label>
+        <input type="number" id="sig-filter-conf" class="form-input form-input--sm" value="50" min="0" max="100" step="5" aria-label="Minimum confidence threshold (0–100)">
+        <span class="input-suffix">%</span>
+      </div>
+      <button id="sig-filter-apply" class="btn btn-secondary btn-sm" aria-label="Apply filters">Apply</button>
+    </div>
+
+    <div id="signals-list" class="signals-list" aria-label="Signal history list">
+      <div class="empty-state">
+        <div class="empty-state__icon" aria-hidden="true">📡</div>
+        <div class="empty-state__text">No signals in history yet. Run the scanner to generate signals.</div>
+      </div>
+    </div>
+
+    <div class="pagination" id="signals-pagination" aria-label="Signal pagination" role="navigation"></div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 4 — STRATEGY LAB
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-strategy-lab" class="screen" aria-label="Strategy Lab">
+    <div class="screen-header">
+      <h1 class="screen-title">STRATEGY LAB</h1>
+    </div>
+
+    <div class="strategy-lab-layout">
+      <aside class="strategy-lab__sidebar" aria-label="Strategy selector">
+        <ul class="strategy-nav" role="list">
+          <li><button class="strategy-nav__btn strategy-nav__btn--active" data-strat="orb">Opening Range Breakout</button></li>
+          <li><button class="strategy-nav__btn" data-strat="vwap_reclaim">VWAP Reclaim/Rejection</button></li>
+          <li><button class="strategy-nav__btn" data-strat="ema_cross">EMA Crossover 9/21</button></li>
+          <li><button class="strategy-nav__btn" data-strat="gap_fade">Gap Fade</button></li>
+          <li><button class="strategy-nav__btn" data-strat="momentum_burst">Momentum Burst</button></li>
+          <li><button class="strategy-nav__btn" data-strat="inside_bar">Inside Bar Breakout</button></li>
+          <li><button class="strategy-nav__btn" data-strat="reversal_hammer">Reversal Hammer</button></li>
+        </ul>
+      </aside>
+      <div class="strategy-lab__detail" id="strategy-detail-panel" aria-live="polite">
+        <div class="strat-detail__header">
+          <h2 id="strat-name" class="strat-detail__name">Opening Range Breakout (ORB)</h2>
+          <span id="strat-regime-tag" class="regime-badge">TRENDING BULL</span>
+        </div>
+        <div class="strat-detail__section">
+          <h3 class="strat-detail__subhead">Entry Logic</h3>
+          <ul id="strat-entry-rules" class="rules-list" aria-label="Entry rules">
+            <li>Identify the high/low of the first 15-minute candle (09:15–09:30)</li>
+            <li>Enter LONG on breakout above ORB high with volume > 1.5× 20-period avg</li>
+            <li>Enter SHORT on breakdown below ORB low with volume confirmation</li>
+            <li>VIX must be &lt; 18 (low volatility preferred)</li>
+          </ul>
+        </div>
+        <div class="strat-detail__section">
+          <h3 class="strat-detail__subhead">Exit Rules</h3>
+          <ul id="strat-exit-rules" class="rules-list" aria-label="Exit rules">
+            <li>Initial stop: opposite side of ORB range</li>
+            <li>Trail stop to 50% of ORB range once 1R achieved</li>
+            <li>Time-based exit: square off by 13:00 if target not hit</li>
+            <li>Force exit at 15:15 (EOD square-off)</li>
+          </ul>
+        </div>
+        <div class="strat-detail__section">
+          <h3 class="strat-detail__subhead">Best Conditions</h3>
+          <div id="strat-conditions" class="conditions-grid">
+            <div class="condition-chip condition-chip--good">VIX 12–18</div>
+            <div class="condition-chip condition-chip--good">Strong Gap Up/Down</div>
+            <div class="condition-chip condition-chip--good">Trending Market</div>
+            <div class="condition-chip condition-chip--bad">Avoid on Budget/RBI days</div>
+            <div class="condition-chip condition-chip--bad">Avoid in Choppy Regime</div>
+          </div>
+        </div>
+        <div class="strat-detail__section">
+          <h3 class="strat-detail__subhead">Backtest Summary (5Y)</h3>
+          <div id="strat-perf" class="strat-perf-grid">
+            <div class="strat-perf__item"><span class="label">Win Rate</span><span class="value value--pos" id="strat-win-rate">57%</span></div>
+            <div class="strat-perf__item"><span class="label">Avg RR</span><span class="value" id="strat-rr">1.8</span></div>
+            <div class="strat-perf__item"><span class="label">Profit Factor</span><span class="value" id="strat-pf">2.1</span></div>
+            <div class="strat-perf__item"><span class="label">Max DD</span><span class="value value--neg" id="strat-dd">-14%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 5 — BACKTEST LAB
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-backtest" class="screen" aria-label="Backtest Lab">
+    <div class="screen-header">
+      <h1 class="screen-title">BACKTEST LAB</h1>
+    </div>
+
+    <form id="backtest-form" class="backtest-form" aria-label="Backtest configuration">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="bt-strategy">Strategy</label>
+          <select id="bt-strategy" class="form-select" aria-label="Select strategy for backtest">
+            <option value="orb">Opening Range Breakout</option>
+            <option value="vwap_reclaim">VWAP Reclaim/Rejection</option>
+            <option value="ema_cross">EMA Crossover 9/21</option>
+            <option value="gap_fade">Gap Fade</option>
+            <option value="momentum_burst">Momentum Burst</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bt-start">Start Date</label>
+          <input type="date" id="bt-start" class="form-input" aria-label="Backtest start date">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bt-end">End Date</label>
+          <input type="date" id="bt-end" class="form-input" aria-label="Backtest end date">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="bt-capital">Capital (₹)</label>
+          <input type="number" id="bt-capital" class="form-input" value="500000" min="10000" step="10000" aria-label="Starting capital in rupees">
+        </div>
+      </div>
+      <button type="submit" id="bt-run-btn" class="btn btn-accent" aria-label="Run backtest">
+        <span id="bt-run-label">▶ Run Backtest</span>
+      </button>
+    </form>
+
+    <div id="backtest-results" class="backtest-results" style="display:none" aria-label="Backtest results">
+      <div class="bt-metrics-row">
+        <div class="metric-tile"><div class="metric-tile__label">Total Return</div><div class="metric-tile__value" id="bt-total-return">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Win Rate</div><div class="metric-tile__value" id="bt-win-rate">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Profit Factor</div><div class="metric-tile__value" id="bt-pf">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Avg RR</div><div class="metric-tile__value" id="bt-rr">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Max Drawdown</div><div class="metric-tile__value" id="bt-dd">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Sharpe Ratio</div><div class="metric-tile__value" id="bt-sharpe">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Total Trades</div><div class="metric-tile__value" id="bt-trades">—</div></div>
+        <div class="metric-tile"><div class="metric-tile__label">Expectancy (₹)</div><div class="metric-tile__value" id="bt-expectancy">—</div></div>
+      </div>
+
+      <div class="chart-panel">
+        <h2 class="chart-panel__title">Equity Curve</h2>
+        <div id="equity-chart" class="chart-area" aria-label="Equity curve chart" role="img"></div>
+      </div>
+
+      <div class="bt-tables-row">
+        <div class="bt-table-panel">
+          <h2 class="bt-table-panel__title">Monthly Returns</h2>
+          <table class="data-table" aria-label="Monthly returns table">
+            <thead><tr><th>Month</th><th>Trades</th><th>Wins</th><th>P&amp;L (₹)</th><th>Return%</th></tr></thead>
+            <tbody id="bt-monthly-tbody"><tr><td colspan="5" class="table-loading">—</td></tr></tbody>
+          </table>
+        </div>
+        <div class="bt-table-panel">
+          <h2 class="bt-table-panel__title">Exit Breakdown</h2>
+          <div id="exit-breakdown-chart" class="chart-area chart-area--sm" aria-label="Exit breakdown doughnut chart" role="img"></div>
+        </div>
+      </div>
+
+      <div class="bt-trade-log">
+        <h2 class="bt-table-panel__title">Trade Log</h2>
+        <div class="table-scroll">
+          <table class="data-table" aria-label="Backtest trade log">
+            <thead><tr><th>Date</th><th>Direction</th><th>Entry</th><th>Exit</th><th>P&amp;L (₹)</th><th>RR</th><th>Exit Reason</th></tr></thead>
+            <tbody id="bt-trade-log-tbody"><tr><td colspan="7" class="table-loading">—</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 6 — SESSION REPLAY
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-replay" class="screen" aria-label="Session Replay">
+    <div class="screen-header">
+      <h1 class="screen-title">SESSION REPLAY</h1>
+    </div>
+
+    <div class="replay-controls-top">
+      <div class="form-group">
+        <label class="form-label" for="replay-date">Date</label>
+        <input type="date" id="replay-date" class="form-input" aria-label="Select replay date">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="replay-symbol">Symbol</label>
+        <select id="replay-symbol" class="form-select" aria-label="Select symbol for replay">
+          <option value="NIFTY">NIFTY 50</option>
+          <option value="BANKNIFTY">BANKNIFTY</option>
+          <option value="FINNIFTY">FINNIFTY</option>
+        </select>
+      </div>
+      <button id="load-session-btn" class="btn btn-accent" aria-label="Load session for replay">Load Session</button>
+    </div>
+
+    <div class="replay-layout">
+      <div class="replay-chart-col">
+        <div id="replay-chart" class="chart-area chart-area--lg" aria-label="Replay price chart" role="img">
+          <div class="chart-placeholder">Select date and symbol, then Load Session.</div>
+        </div>
+
+        <div class="replay-playback" role="group" aria-label="Replay playback controls">
+          <button id="replay-rewind" class="btn btn-ghost btn-icon-only" aria-label="Rewind to start">⏮</button>
+          <button id="replay-play-pause" class="btn btn-accent" aria-label="Play replay">▶ Play</button>
+          <div class="replay-speed" role="group" aria-label="Replay speed">
+            <span class="replay-speed__label">Speed:</span>
+            <button class="btn btn-ghost btn-sm replay-speed__btn replay-speed__btn--active" data-speed="1"  aria-label="1x speed" aria-pressed="true">1×</button>
+            <button class="btn btn-ghost btn-sm replay-speed__btn" data-speed="5"  aria-label="5x speed" aria-pressed="false">5×</button>
+            <button class="btn btn-ghost btn-sm replay-speed__btn" data-speed="20" aria-label="20x speed" aria-pressed="false">20×</button>
+          </div>
+          <div class="replay-progress">
+            <span id="replay-bar-num" class="replay-bar-num">Bar 0 / 0</span>
+            <input type="range" id="replay-scrubber" class="replay-scrubber" min="0" max="100" value="0" aria-label="Replay position scrubber">
+          </div>
+        </div>
+      </div>
+
+      <aside class="replay-side-panel" aria-label="Replay signal overlay and bar info">
+        <div class="replay-panel-block">
+          <h2 class="replay-panel-block__title">Current Bar</h2>
+          <dl class="bar-info" id="replay-bar-info" aria-label="OHLCV and indicator data for current bar">
+            <dt>Open</dt><dd id="bar-open">—</dd>
+            <dt>High</dt><dd id="bar-high">—</dd>
+            <dt>Low</dt><dd id="bar-low">—</dd>
+            <dt>Close</dt><dd id="bar-close">—</dd>
+            <dt>Volume</dt><dd id="bar-volume">—</dd>
+            <dt>VWAP</dt><dd id="bar-vwap">—</dd>
+            <dt>EMA 9</dt><dd id="bar-ema9">—</dd>
+            <dt>EMA 21</dt><dd id="bar-ema21">—</dd>
+            <dt>RSI 14</dt><dd id="bar-rsi">—</dd>
+          </dl>
+        </div>
+        <div class="replay-panel-block">
+          <h2 class="replay-panel-block__title">Signal Overlay</h2>
+          <div id="replay-signals-overlay" class="replay-signals-overlay" aria-live="polite">
+            <div class="empty-state empty-state--sm">No signals on this bar.</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 7 — OPTION CHAIN
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-options" class="screen" aria-label="Option Chain">
+    <div class="screen-header">
+      <h1 class="screen-title">OPTION CHAIN</h1>
+    </div>
+
+    <div class="options-controls">
+      <div class="form-group">
+        <label class="form-label" for="oc-symbol">Symbol</label>
+        <select id="oc-symbol" class="form-select" aria-label="Select underlying symbol">
+          <option value="NIFTY">NIFTY</option>
+          <option value="BANKNIFTY">BANKNIFTY</option>
+          <option value="FINNIFTY">FINNIFTY</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="oc-expiry">Expiry</label>
+        <select id="oc-expiry" class="form-select" aria-label="Select expiry date">
+          <option value="">Loading expiries…</option>
+        </select>
+      </div>
+      <button id="oc-refresh-btn" class="btn btn-accent" aria-label="Refresh option chain">Refresh</button>
+    </div>
+
+    <div class="oc-summary" aria-label="Option chain summary metrics">
+      <div class="oc-summary__tile"><span class="oc-summary__label">PCR (OI)</span><span id="oc-pcr" class="oc-summary__val">—</span></div>
+      <div class="oc-summary__tile"><span class="oc-summary__label">Max Pain</span><span id="oc-maxpain" class="oc-summary__val">—</span></div>
+      <div class="oc-summary__tile"><span class="oc-summary__label">ATM Premium</span><span id="oc-atm-premium" class="oc-summary__val">—</span></div>
+      <div class="oc-summary__tile"><span class="oc-summary__label">IV Percentile</span><span id="oc-ivp" class="oc-summary__val">—</span></div>
+      <div class="oc-summary__tile"><span class="oc-summary__label">CE Wall</span><span id="oc-ce-wall" class="oc-summary__val">—</span></div>
+      <div class="oc-summary__tile"><span class="oc-summary__label">PE Wall</span><span id="oc-pe-wall" class="oc-summary__val">—</span></div>
+    </div>
+
+    <div class="table-scroll">
+      <table class="data-table option-chain-table" aria-label="Option chain data">
         <thead>
           <tr>
-            <th>Strategy</th>
-            <th>Sharpe</th>
-            <th>Win Rate</th>
-            <th>Prof. Factor</th>
-            <th>Max DD</th>
-            <th>Exp. / ₹1L</th>
-            <th>Trades</th>
+            <th class="ce-col">CE OI</th>
+            <th class="ce-col">CE Chg OI</th>
+            <th class="ce-col">CE Volume</th>
+            <th class="ce-col">CE IV</th>
+            <th class="ce-col">CE LTP</th>
+            <th class="strike-col">STRIKE</th>
+            <th class="pe-col">PE LTP</th>
+            <th class="pe-col">PE IV</th>
+            <th class="pe-col">PE Volume</th>
+            <th class="pe-col">PE Chg OI</th>
+            <th class="pe-col">PE OI</th>
           </tr>
         </thead>
-        <tbody id="lb-body"></tbody>
+        <tbody id="option-chain-tbody">
+          <tr><td colspan="11" class="table-loading">Select symbol and expiry to load option chain.</td></tr>
+        </tbody>
       </table>
     </div>
   </section>
 
-  <!-- ── TAB 2: LIVE SCANNER ───────────────────────────────────────────── -->
-  <section class="pane" id="pane-scanner">
-    <div class="ptitle">LIVE SCANNER</div>
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 8 — MARKET HEATMAP
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-heatmap" class="screen" aria-label="Market Heatmap">
+    <div class="screen-header">
+      <h1 class="screen-title">MARKET HEATMAP</h1>
+    </div>
 
-    <!-- Controls bar -->
-    <div class="sc-bar">
-      <div class="sc-status">
-        <span class="sc-dot" id="sc-dot"></span>
-        <span id="sc-status-txt">Checking…</span>
+    <div class="heatmap-toolbar">
+      <div class="toggle-group" role="group" aria-label="Heatmap scope">
+        <button class="toggle-group__btn toggle-group__btn--active" data-heatmap="nifty50" aria-pressed="true">NIFTY 50</button>
+        <button class="toggle-group__btn" data-heatmap="sector" aria-pressed="false">SECTOR</button>
       </div>
-      <select id="sc-strategy" class="sc-select" aria-label="Strategy">
-        <option value="vwap_reversal">VWAP Reversal</option>
-        <option value="opening_range_breakout">Opening Range Breakout</option>
-        <option value="supertrend_ema" selected>Supertrend + EMA</option>
-        <option value="rsi_divergence">RSI Divergence</option>
-        <option value="gap_fade">Gap Fade</option>
-      </select>
-      <button class="sc-run-btn" id="sc-run">⬤ RUN SCAN</button>
-      <div class="sc-info" id="sc-info"></div>
+      <div class="heatmap-legend" aria-label="Heatmap color legend">
+        <span class="legend-chip legend-chip--strong-neg">-3%+</span>
+        <span class="legend-chip legend-chip--neg">-1–3%</span>
+        <span class="legend-chip legend-chip--flat">±1%</span>
+        <span class="legend-chip legend-chip--pos">+1–3%</span>
+        <span class="legend-chip legend-chip--strong-pos">+3%+</span>
+      </div>
     </div>
 
-    <!-- Market-closed banner (shown when market is closed) -->
-    <div id="sc-closed" class="sc-closed" style="display:none">
-      <div class="sc-closed-icon">◐</div>
-      <div class="sc-closed-title">MARKET CLOSED</div>
-      <div class="sc-closed-sub">NSE opens 09:15 IST · Mon – Fri<br>You can still run the scanner to see last-session signals.</div>
+    <div class="heatmap-layout">
+      <div class="heatmap-canvas-wrap">
+        <canvas id="heatmap-canvas" width="800" height="500" aria-label="Market heatmap visualization" role="img"></canvas>
+      </div>
+      <aside class="heatmap-sidebar" aria-label="Top and bottom movers">
+        <div class="movers-block">
+          <h2 class="movers-block__title">TOP GAINERS</h2>
+          <ul id="heatmap-top-movers" class="movers-list" aria-label="Top gaining stocks">
+            <li class="movers-list__item movers-list__item--loading">Loading…</li>
+          </ul>
+        </div>
+        <div class="movers-block">
+          <h2 class="movers-block__title">BOTTOM LOSERS</h2>
+          <ul id="heatmap-bottom-movers" class="movers-list" aria-label="Bottom losing stocks">
+            <li class="movers-list__item movers-list__item--loading">Loading…</li>
+          </ul>
+        </div>
+      </aside>
     </div>
-
-    <!-- Signal results injected here -->
-    <div id="sc-results"></div>
   </section>
 
-  <!-- ── TAB 3: BACKTEST LAB ───────────────────────────────────────────── -->
-  <section class="pane" id="pane-backtest">
-    <div class="ptitle">BACKTEST LAB</div>
-
-    <!-- ── Form ──────────────────────────────────────────────────────────── -->
-    <div class="bt-form">
-      <div class="bt-fields">
-        <div class="bt-field">
-          <label class="bt-label" for="bt-strategy">Strategy</label>
-          <select id="bt-strategy" class="bt-input sc-select" aria-label="Strategy">
-            <option value="vwap_reversal">VWAP Reversal</option>
-            <option value="opening_range_breakout">Opening Range Breakout</option>
-            <option value="supertrend_ema" selected>Supertrend + EMA</option>
-            <option value="rsi_divergence">RSI Divergence</option>
-            <option value="gap_fade">Gap Fade</option>
-          </select>
-        </div>
-        <div class="bt-field">
-          <label class="bt-label" for="bt-start">Start Date</label>
-          <input id="bt-start" type="date" class="bt-input" autocomplete="off">
-        </div>
-        <div class="bt-field">
-          <label class="bt-label" for="bt-end">End Date</label>
-          <input id="bt-end" type="date" class="bt-input" autocomplete="off">
-        </div>
-        <div class="bt-field">
-          <label class="bt-label" for="bt-capital">Capital (₹)</label>
-          <input id="bt-capital" type="number" class="bt-input" value="100000" min="10000" step="10000" autocomplete="off">
-        </div>
-      </div>
-      <div class="bt-sym-row">
-        <label class="bt-label" for="bt-sym-input">
-          Symbols <span class="dim" style="text-transform:none;letter-spacing:0;font-size:10px">— optional, comma-separated .NS tickers; blank = all Nifty 50</span>
-        </label>
-        <input id="bt-sym-input" type="text" class="bt-input" style="margin-top:5px" placeholder="e.g. RELIANCE.NS, TCS.NS, INFY.NS" autocomplete="off">
-      </div>
-      <button class="sc-run-btn" id="bt-run">⬤ RUN BACKTEST</button>
-      <div class="bt-note">5-min data is limited to 60 days · 50 symbols ≈ 30–90 s</div>
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 9 — RISK CALCULATOR
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-risk" class="screen" aria-label="Risk Calculator">
+    <div class="screen-header">
+      <h1 class="screen-title">RISK CALCULATOR</h1>
     </div>
 
-    <!-- ── Loading ────────────────────────────────────────────────────────── -->
-    <div class="bt-loading" id="bt-loading">
-      <div class="bt-loading-h">RUNNING…</div>
-      <div class="bt-loading-sub" id="bt-loading-sub">Fetching 5-min data and running simulation</div>
+    <div class="risk-layout">
+      <form id="risk-form" class="risk-form" aria-label="Risk calculation inputs" novalidate>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="risk-capital">Capital (₹)</label>
+            <input type="number" id="risk-capital" class="form-input" value="500000" min="1000" step="1000" aria-label="Total trading capital in rupees" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="risk-pct">Risk per Trade %</label>
+            <input type="number" id="risk-pct" class="form-input" value="1" min="0.1" max="5" step="0.1" aria-label="Risk percentage per trade" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="risk-instrument">Instrument</label>
+            <select id="risk-instrument" class="form-select" aria-label="Select instrument type">
+              <option value="CE">Call Option (CE)</option>
+              <option value="PE">Put Option (PE)</option>
+              <option value="EQUITY">Equity / Futures</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="risk-entry">Entry Price (₹)</label>
+            <input type="number" id="risk-entry" class="form-input" placeholder="e.g. 24500" step="0.05" aria-label="Entry price" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="risk-sl">Stop Loss (₹)</label>
+            <input type="number" id="risk-sl" class="form-input" placeholder="e.g. 24300" step="0.05" aria-label="Stop loss price" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="risk-target">Target (₹)</label>
+            <input type="number" id="risk-target" class="form-input" placeholder="e.g. 24900" step="0.05" aria-label="Target price" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="risk-lotsize">Lot Size</label>
+            <input type="number" id="risk-lotsize" class="form-input" value="50" min="1" aria-label="Lot size (units per contract)">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="risk-premium">Option Premium (₹)</label>
+            <input type="number" id="risk-premium" class="form-input" placeholder="e.g. 150" step="0.05" aria-label="Option premium (for CE/PE)">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-accent" aria-label="Calculate risk parameters">Calculate</button>
+      </form>
+
+      <div id="risk-output" class="risk-output" aria-label="Risk calculation results" aria-live="polite">
+        <div class="risk-output__grid">
+          <div class="risk-tile"><div class="risk-tile__label">Contracts / Qty</div><div class="risk-tile__val" id="ro-contracts">—</div></div>
+          <div class="risk-tile risk-tile--danger"><div class="risk-tile__label">Max Loss (₹)</div><div class="risk-tile__val" id="ro-maxloss">—</div></div>
+          <div class="risk-tile risk-tile--danger"><div class="risk-tile__label">Max Loss %</div><div class="risk-tile__val" id="ro-maxloss-pct">—</div></div>
+          <div class="risk-tile risk-tile--success"><div class="risk-tile__label">Target Gain (₹)</div><div class="risk-tile__val" id="ro-gain">—</div></div>
+          <div class="risk-tile"><div class="risk-tile__label">Risk:Reward</div><div class="risk-tile__val" id="ro-rr">—</div></div>
+          <div class="risk-tile"><div class="risk-tile__label">Breakeven</div><div class="risk-tile__val" id="ro-be">—</div></div>
+          <div class="risk-tile"><div class="risk-tile__label">1R Level</div><div class="risk-tile__val" id="ro-1r">—</div></div>
+          <div class="risk-tile"><div class="risk-tile__label">2R Level</div><div class="risk-tile__val" id="ro-2r">—</div></div>
+          <div class="risk-tile"><div class="risk-tile__label">3R Level</div><div class="risk-tile__val" id="ro-3r">—</div></div>
+          <div class="risk-tile"><div class="risk-tile__label">Margin Req. (est.)</div><div class="risk-tile__val" id="ro-margin">—</div></div>
+        </div>
+
+        <div class="fno-cost-table">
+          <h2 class="fno-cost-table__title">F&amp;O Cost Breakdown</h2>
+          <table class="data-table" aria-label="F&O cost breakdown">
+            <thead><tr><th>Component</th><th>Amount (₹)</th></tr></thead>
+            <tbody>
+              <tr><td>Brokerage</td><td id="ro-brokerage">—</td></tr>
+              <tr><td>STT</td><td id="ro-stt">—</td></tr>
+              <tr><td>Exchange Charges</td><td id="ro-exc">—</td></tr>
+              <tr><td>GST (18%)</td><td id="ro-gst">—</td></tr>
+              <tr><td>SEBI Fee</td><td id="ro-sebi">—</td></tr>
+              <tr class="table-total"><td>Total Charges</td><td id="ro-total-charges">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="daily-loss-limit-panel" aria-label="Daily loss limit status">
+          <div class="form-group">
+            <label class="form-label" for="daily-loss-limit">Daily Loss Limit (₹)</label>
+            <input type="number" id="daily-loss-limit" class="form-input" placeholder="e.g. 5000" aria-label="Daily loss limit in rupees">
+          </div>
+          <div id="daily-loss-status" class="daily-loss-status" aria-live="polite">Set a daily loss limit to enable automatic halt.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 10 — TRADE JOURNAL
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-journal" class="screen" aria-label="Trade Journal">
+    <div class="screen-header">
+      <h1 class="screen-title">TRADE JOURNAL</h1>
+      <div class="screen-header__actions">
+        <button id="export-csv-btn" class="btn btn-secondary btn-sm" aria-label="Export journal to CSV">Export CSV</button>
+        <button id="toggle-add-trade-btn" class="btn btn-accent btn-sm" aria-label="Toggle add trade form" aria-expanded="false">+ Log Trade</button>
+      </div>
     </div>
 
-    <!-- ── Results ────────────────────────────────────────────────────────── -->
-    <div class="bt-results" id="bt-results">
-      <div class="sh">Summary</div>
-      <div class="mgrid" id="bt-mgrid"></div>
-      <div class="sh">Equity Curve</div>
-      <div id="bt-chart"></div>
-      <div class="sh">Exit Breakdown</div>
-      <div class="bt-exit-grid" id="bt-exits"></div>
-      <div class="sh">By Symbol</div>
-      <div class="sgrid" id="bt-sym-grid"></div>
-      <div class="sh">Last 20 Trades</div>
-      <div style="overflow-x:auto">
-        <table class="tlog">
-          <thead>
-            <tr>
-              <th>Date / Time</th><th>Symbol</th><th>Entry ₹</th>
-              <th>Exit ₹</th><th>Qty</th><th>P&amp;L</th><th>Exit</th>
-            </tr>
-          </thead>
-          <tbody id="bt-trades"></tbody>
+    <div id="add-trade-form-wrap" class="collapsible" style="display:none" aria-label="Add trade form">
+      <form id="add-trade-form" class="trade-form" aria-label="Log a new trade">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="tj-date">Date</label>
+            <input type="date" id="tj-date" class="form-input" required aria-label="Trade date">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tj-symbol">Symbol</label>
+            <input type="text" id="tj-symbol" class="form-input" placeholder="e.g. NIFTY 24500 CE" required aria-label="Trade symbol">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tj-setup">Setup</label>
+            <select id="tj-setup" class="form-select" aria-label="Select trading setup">
+              <option value="orb">ORB</option>
+              <option value="vwap_reclaim">VWAP Reclaim</option>
+              <option value="ema_cross">EMA Cross</option>
+              <option value="gap_fade">Gap Fade</option>
+              <option value="momentum_burst">Momentum Burst</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tj-direction">Direction</label>
+            <select id="tj-direction" class="form-select" aria-label="Select trade direction">
+              <option value="LONG">LONG (CE)</option>
+              <option value="SHORT">SHORT (PE)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="tj-entry">Entry (₹)</label>
+            <input type="number" id="tj-entry" class="form-input" step="0.05" required aria-label="Entry price">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tj-exit">Exit (₹)</label>
+            <input type="number" id="tj-exit" class="form-input" step="0.05" required aria-label="Exit price">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tj-qty">Qty / Lots</label>
+            <input type="number" id="tj-qty" class="form-input" value="1" min="1" required aria-label="Quantity or number of lots">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tj-pnl">P&amp;L (₹)</label>
+            <input type="number" id="tj-pnl" class="form-input" step="1" aria-label="Profit or loss in rupees (auto-calculated or override)">
+          </div>
+        </div>
+        <div class="form-group form-group--full">
+          <label class="form-label">Mistake Tags</label>
+          <div class="checkbox-group" role="group" aria-label="Select mistake tags">
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="early_entry"> Early Entry</label>
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="late_entry"> Late Entry</label>
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="fomo"> FOMO Trade</label>
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="oversized"> Oversized Position</label>
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="sl_moved"> SL Moved</label>
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="no_plan"> No Plan</label>
+            <label class="checkbox-label"><input type="checkbox" name="mistake" value="revenge"> Revenge Trade</label>
+          </div>
+        </div>
+        <div class="form-group form-group--full">
+          <label class="form-label" for="tj-notes">Notes / Post-mortem</label>
+          <textarea id="tj-notes" class="form-textarea" rows="3" placeholder="What went right, what went wrong, lessons learned…" aria-label="Trade notes and post-mortem analysis"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-accent" aria-label="Save trade to journal">Save Trade</button>
+          <button type="button" id="cancel-add-trade-btn" class="btn btn-ghost" aria-label="Cancel and close form">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="filter-bar" role="search" aria-label="Filter trades">
+      <input type="date" id="jf-date-from" class="form-input form-input--sm" aria-label="Filter from date">
+      <span aria-hidden="true">to</span>
+      <input type="date" id="jf-date-to" class="form-input form-input--sm" aria-label="Filter to date">
+      <select id="jf-setup" class="form-select form-select--sm" aria-label="Filter by setup">
+        <option value="">All Setups</option>
+        <option value="orb">ORB</option>
+        <option value="vwap_reclaim">VWAP Reclaim</option>
+        <option value="ema_cross">EMA Cross</option>
+        <option value="gap_fade">Gap Fade</option>
+      </select>
+      <select id="jf-dir" class="form-select form-select--sm" aria-label="Filter by direction">
+        <option value="">All</option>
+        <option value="LONG">LONG</option>
+        <option value="SHORT">SHORT</option>
+      </select>
+      <button id="jf-apply-btn" class="btn btn-secondary btn-sm" aria-label="Apply journal filters">Filter</button>
+      <button id="jf-reset-btn" class="btn btn-ghost btn-sm" aria-label="Reset journal filters">Reset</button>
+    </div>
+
+    <div class="pnl-summary-strip" aria-label="P&L summary" id="journal-pnl-strip">
+      <div class="pnl-strip__item"><span class="pnl-strip__label">Total Trades</span><span id="jsum-total" class="pnl-strip__val">0</span></div>
+      <div class="pnl-strip__item"><span class="pnl-strip__label">Wins</span><span id="jsum-wins" class="pnl-strip__val pnl-strip__val--pos">0</span></div>
+      <div class="pnl-strip__item"><span class="pnl-strip__label">Losses</span><span id="jsum-losses" class="pnl-strip__val pnl-strip__val--neg">0</span></div>
+      <div class="pnl-strip__item"><span class="pnl-strip__label">Net P&amp;L</span><span id="jsum-pnl" class="pnl-strip__val">₹0</span></div>
+      <div class="pnl-strip__item"><span class="pnl-strip__label">Win Rate</span><span id="jsum-winrate" class="pnl-strip__val">0%</span></div>
+      <div class="pnl-strip__item"><span class="pnl-strip__label">Avg RR</span><span id="jsum-rr" class="pnl-strip__val">—</span></div>
+    </div>
+
+    <div class="table-scroll">
+      <table class="data-table" aria-label="Trade journal entries" id="journal-table">
+        <thead>
+          <tr>
+            <th>Date</th><th>Symbol</th><th>Setup</th><th>Dir</th>
+            <th>Entry</th><th>Exit</th><th>Qty</th><th>P&amp;L (₹)</th>
+            <th>Mistakes</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="journal-tbody">
+          <tr><td colspan="10" class="table-loading">No trades logged yet. Click "+ Log Trade" to add your first entry.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 11 — PERFORMANCE ANALYTICS
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-analytics" class="screen" aria-label="Performance Analytics">
+    <div class="screen-header">
+      <h1 class="screen-title">PERFORMANCE ANALYTICS</h1>
+    </div>
+
+    <div class="analytics-summary" aria-label="Key performance metrics">
+      <div class="metric-tile"><div class="metric-tile__label">Win Rate</div><div class="metric-tile__value" id="an-winrate">—</div></div>
+      <div class="metric-tile"><div class="metric-tile__label">Expectancy (₹)</div><div class="metric-tile__value" id="an-expectancy">—</div></div>
+      <div class="metric-tile"><div class="metric-tile__label">Profit Factor</div><div class="metric-tile__value" id="an-pf">—</div></div>
+      <div class="metric-tile"><div class="metric-tile__label">Avg RR Achieved</div><div class="metric-tile__value" id="an-rr">—</div></div>
+      <div class="metric-tile"><div class="metric-tile__label">Sharpe Ratio</div><div class="metric-tile__value" id="an-sharpe">—</div></div>
+      <div class="metric-tile"><div class="metric-tile__label">Max Drawdown</div><div class="metric-tile__value" id="an-dd">—</div></div>
+    </div>
+
+    <div class="chart-panel">
+      <h2 class="chart-panel__title">Equity Curve (Journal)</h2>
+      <div id="analytics-equity-chart" class="chart-area" aria-label="Journal equity curve" role="img"></div>
+    </div>
+
+    <div class="analytics-tables-row">
+      <div class="analytics-table-panel">
+        <h2 class="analytics-table-panel__title">Performance by Setup</h2>
+        <table class="data-table" aria-label="Performance breakdown by trading setup">
+          <thead><tr><th>Setup</th><th>Trades</th><th>Win%</th><th>Avg P&amp;L</th><th>PF</th></tr></thead>
+          <tbody id="an-by-setup-tbody"><tr><td colspan="5" class="table-loading">No data.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="analytics-table-panel">
+        <h2 class="analytics-table-panel__title">Performance by Weekday</h2>
+        <table class="data-table" aria-label="Performance breakdown by day of week">
+          <thead><tr><th>Day</th><th>Trades</th><th>Win%</th><th>Net P&amp;L</th></tr></thead>
+          <tbody id="an-by-weekday-tbody"><tr><td colspan="4" class="table-loading">No data.</td></tr></tbody>
         </table>
       </div>
     </div>
+
+    <div class="pnl-calendar-wrap" aria-label="P&L calendar heatmap">
+      <h2 class="chart-panel__title">P&amp;L Calendar</h2>
+      <div id="pnl-calendar" class="pnl-calendar" aria-label="Monthly P&L heatmap calendar" role="img"></div>
+    </div>
+
+    <div class="analytics-insights" aria-label="Performance insights">
+      <h2 class="chart-panel__title">Insights</h2>
+      <ul id="insights-list" class="insights-list" aria-label="Automated trading insights">
+        <li class="insights-list__item insights-list__item--loading">Add trades to your journal to generate insights.</li>
+      </ul>
+    </div>
+
+    <div class="mistake-freq-wrap">
+      <h2 class="chart-panel__title">Mistake Frequency</h2>
+      <div id="mistake-freq-chart" class="mistake-freq-chart" aria-label="Mistake frequency bar chart" role="img"></div>
+    </div>
   </section>
 
-  <!-- ── TAB 4: JOURNAL ────────────────────────────────────────────────── -->
-  <section class="pane" id="pane-journal">
-    <div class="ptitle">JOURNAL</div>
-
-    <!-- Summary stats -->
-    <div class="mgrid" id="jnl-stats" style="margin-bottom:24px"></div>
-
-    <!-- Add / Edit form -->
-    <div class="bt-form" id="jnl-form-wrap">
-      <div class="sh" style="margin-top:0;margin-bottom:14px"><span id="jnl-form-title">Log Trade</span></div>
-      <input type="hidden" id="jnl-edit-id">
-      <div class="bt-fields">
-        <div class="bt-field">
-          <label class="bt-label" for="jnl-date">Date</label>
-          <input id="jnl-date" type="date" class="bt-input" autocomplete="off">
-        </div>
-        <div class="bt-field">
-          <label class="bt-label" for="jnl-symbol">Symbol</label>
-          <input id="jnl-symbol" type="text" class="bt-input" placeholder="RELIANCE" autocomplete="off">
-        </div>
-        <div class="bt-field">
-          <label class="bt-label" for="jnl-strategy">Strategy</label>
-          <select id="jnl-strategy" class="bt-input sc-select">
-            <option value="">— none —</option>
-            <option value="vwap_reversal">VWAP Reversal</option>
-            <option value="opening_range_breakout">ORB</option>
-            <option value="supertrend_ema">Supertrend + EMA</option>
-            <option value="rsi_divergence">RSI Divergence</option>
-            <option value="gap_fade">Gap Fade</option>
-            <option value="manual">Manual</option>
-          </select>
-        </div>
-        <div class="bt-field">
-          <label class="bt-label" for="jnl-qty">Qty</label>
-          <input id="jnl-qty" type="number" class="bt-input" placeholder="10" min="1" step="1" autocomplete="off">
-        </div>
-        <div class="bt-field">
-          <label class="bt-label" for="jnl-entry">Entry ₹</label>
-          <input id="jnl-entry" type="number" class="bt-input" placeholder="1234.55" step="0.05" autocomplete="off">
-        </div>
-        <div class="bt-field">
-          <label class="bt-label" for="jnl-exit">Exit ₹ <span class="dim" style="text-transform:none;letter-spacing:0;font-size:9px">optional</span></label>
-          <input id="jnl-exit" type="number" class="bt-input" placeholder="1250.00" step="0.05" autocomplete="off">
-        </div>
-        <div class="bt-field">
-          <label class="bt-label" for="jnl-sl">Stop Loss ₹</label>
-          <input id="jnl-sl" type="number" class="bt-input" placeholder="1210.00" step="0.05" autocomplete="off">
-        </div>
-        <div class="bt-field">
-          <label class="bt-label" for="jnl-target">Target ₹</label>
-          <input id="jnl-target" type="number" class="bt-input" placeholder="1270.00" step="0.05" autocomplete="off">
-        </div>
-      </div>
-      <div class="bt-sym-row">
-        <label class="bt-label" for="jnl-notes">Notes</label>
-        <input id="jnl-notes" type="text" class="bt-input" style="margin-top:5px" placeholder="Setup rationale, observations…" autocomplete="off">
-      </div>
-      <button class="sc-run-btn" id="jnl-save">+ ADD TRADE</button>
-      <button class="jnl-cancel-btn" id="jnl-cancel" style="display:none">Cancel</button>
+  <!-- ─────────────────────────────────────────────────────────────
+       SCREEN 12 — SETTINGS
+  ───────────────────────────────────────────────────────────────── -->
+  <section id="screen-settings" class="screen" aria-label="Settings">
+    <div class="screen-header">
+      <h1 class="screen-title">SETTINGS</h1>
     </div>
 
-    <!-- Filters + CSV export -->
-    <div class="jnl-filters">
-      <select id="jnl-filter-strat" class="bt-input sc-select" style="width:auto">
-        <option value="">All strategies</option>
-        <option value="vwap_reversal">VWAP Reversal</option>
-        <option value="opening_range_breakout">ORB</option>
-        <option value="supertrend_ema">Supertrend + EMA</option>
-        <option value="rsi_divergence">RSI Divergence</option>
-        <option value="gap_fade">Gap Fade</option>
-        <option value="manual">Manual</option>
-      </select>
-      <input id="jnl-filter-from" type="date" class="bt-input" style="width:auto" title="From date" autocomplete="off">
-      <span style="color:var(--muted);font-size:12px">to</span>
-      <input id="jnl-filter-to" type="date" class="bt-input" style="width:auto" title="To date" autocomplete="off">
-      <button class="jnl-export-btn" id="jnl-export">↓ CSV</button>
-    </div>
+    <div class="settings-layout">
 
-    <!-- Trade table -->
-    <div id="jnl-table-wrap"></div>
+      <div class="settings-group" aria-label="API configuration">
+        <h2 class="settings-group__title">API Configuration</h2>
+        <div class="form-group">
+          <label class="form-label" for="settings-api-url">Backend API URL</label>
+          <div class="input-with-action">
+            <input type="url" id="settings-api-url" class="form-input" placeholder="http://localhost:5000" aria-label="Backend API base URL">
+            <button id="test-api-btn" class="btn btn-secondary" aria-label="Test API connection">Test Connection</button>
+          </div>
+          <div id="api-test-result" class="settings-feedback" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <div class="settings-group" aria-label="Capital and risk settings">
+        <h2 class="settings-group__title">Capital &amp; Risk</h2>
+        <div class="form-group">
+          <label class="form-label" for="settings-capital">Default Capital (₹)</label>
+          <input type="number" id="settings-capital" class="form-input" value="500000" min="10000" step="10000" aria-label="Default trading capital in rupees">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="settings-risk-pct">Default Risk % per Trade
+            <span id="settings-risk-val" class="slider-val">1.0%</span>
+          </label>
+          <input type="range" id="settings-risk-pct" class="form-range" min="0.1" max="5" step="0.1" value="1.0" aria-label="Default risk percentage per trade" aria-valuenow="1.0" aria-valuemin="0.1" aria-valuemax="5">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="settings-daily-loss">Daily Loss Limit %</label>
+          <input type="number" id="settings-daily-loss" class="form-input" value="3" min="0.5" max="10" step="0.5" aria-label="Daily loss limit as percentage of capital">
+          <span class="form-hint">Trading halts when daily P&amp;L breaches this level.</span>
+        </div>
+      </div>
+
+      <div class="settings-group settings-group--prominent" aria-label="Paper trading mode">
+        <h2 class="settings-group__title">Paper Trading Mode</h2>
+        <div class="paper-trade-toggle">
+          <div class="paper-trade-toggle__info">
+            <div class="paper-trade-toggle__name">PAPER TRADING</div>
+            <div class="paper-trade-toggle__desc">All signals and trades are simulated. No real orders placed.</div>
+          </div>
+          <label class="toggle-switch" for="paper-trading-toggle">
+            <input type="checkbox" id="paper-trading-toggle" role="switch" aria-checked="true" checked aria-label="Enable or disable paper trading mode">
+            <span class="toggle-switch__slider"></span>
+          </label>
+        </div>
+        <div id="paper-trade-status" class="paper-trade-status paper-trade-status--active" aria-live="polite">
+          PAPER MODE ACTIVE — Trades will not be executed
+        </div>
+      </div>
+
+      <div class="settings-group" aria-label="Alert preferences">
+        <h2 class="settings-group__title">Alert Preferences</h2>
+        <div class="checkbox-group" role="group" aria-label="Select alert types">
+          <label class="checkbox-label"><input type="checkbox" id="alert-signal" checked name="alerts" value="signal"> New Signal Detected</label>
+          <label class="checkbox-label"><input type="checkbox" id="alert-regime" checked name="alerts" value="regime"> Regime Change</label>
+          <label class="checkbox-label"><input type="checkbox" id="alert-loss-limit" checked name="alerts" value="loss_limit"> Daily Loss Limit Warning</label>
+          <label class="checkbox-label"><input type="checkbox" id="alert-vix-spike" name="alerts" value="vix_spike"> VIX Spike &gt; 20</label>
+          <label class="checkbox-label"><input type="checkbox" id="alert-eod" checked name="alerts" value="eod"> EOD Square-off Reminder (15:00)</label>
+        </div>
+      </div>
+
+      <div class="settings-group settings-group--danger" aria-label="Danger zone">
+        <h2 class="settings-group__title">Danger Zone</h2>
+        <div class="settings-danger-actions">
+          <div class="settings-danger-item">
+            <div class="settings-danger-item__info">
+              <strong>Clear Trade Journal</strong>
+              <p>Permanently delete all journal entries. This cannot be undone.</p>
+            </div>
+            <button id="clear-journal-btn" class="btn btn-danger" aria-label="Clear all journal entries">Clear Journal</button>
+          </div>
+          <div class="settings-danger-item">
+            <div class="settings-danger-item__info">
+              <strong>Reset All Settings</strong>
+              <p>Restore all settings to factory defaults.</p>
+            </div>
+            <button id="reset-settings-btn" class="btn btn-danger" aria-label="Reset all settings to defaults">Reset Settings</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-group settings-group--muted" aria-label="Theme settings (coming soon)">
+        <h2 class="settings-group__title">Theme <span class="badge badge--soon">SOON</span></h2>
+        <p class="settings-placeholder">Custom color themes and chart styles coming in a future release.</p>
+      </div>
+
+      <div class="settings-save-row">
+        <button id="save-settings-btn" class="btn btn-accent" aria-label="Save all settings">Save Settings</button>
+        <span id="settings-save-status" class="settings-feedback" aria-live="polite"></span>
+      </div>
+
+    </div>
   </section>
 
 </main>
 
-<!-- ── DRAWER ────────────────────────────────────────────────────────────── -->
-<div class="overlay" id="overlay"></div>
-<aside class="drawer" id="drawer" role="dialog" aria-modal="true">
-  <button class="dclose" id="dclose" aria-label="Close">✕</button>
-  <div class="dtitle" id="dtitle">—</div>
-  <div class="dsub"   id="dsub"></div>
-  <div class="mgrid"  id="dmgrid"></div>
-  <div class="sh">Equity Curve</div>
-  <div id="dchart"></div>
-  <div class="sh">By Symbol</div>
-  <div class="sgrid" id="dsymbols"></div>
-  <div class="sh">Last 20 Trades</div>
-  <div style="overflow-x:auto">
-    <table class="tlog">
-      <thead>
-        <tr>
-          <th>Date / Time</th><th>Symbol</th><th>Entry ₹</th>
-          <th>Exit ₹</th><th>Qty</th><th>P&amp;L</th><th>Exit</th>
-        </tr>
-      </thead>
-      <tbody id="dtrades"></tbody>
-    </table>
+<!-- ═══════════════════════════════════════════════════════════════
+     BOTTOM NAVIGATION (mobile only)
+═══════════════════════════════════════════════════════════════ -->
+<nav class="bottom-nav" aria-label="Mobile bottom navigation" role="navigation">
+  <a href="#dashboard" class="bottom-nav__item" data-screen="dashboard" aria-label="Dashboard">
+    <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+      <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+    </svg>
+    <span class="bottom-nav__label">Dashboard</span>
+  </a>
+  <a href="#scanner" class="bottom-nav__item" data-screen="scanner" aria-label="Scanner">
+    <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+    </svg>
+    <span class="bottom-nav__label">Scanner</span>
+  </a>
+  <a href="#options" class="bottom-nav__item" data-screen="options" aria-label="Option Chain">
+    <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </svg>
+    <span class="bottom-nav__label">Options</span>
+  </a>
+  <a href="#journal" class="bottom-nav__item" data-screen="journal" aria-label="Trade Journal">
+    <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+    </svg>
+    <span class="bottom-nav__label">Journal</span>
+  </a>
+  <a href="#settings" class="bottom-nav__item" data-screen="settings" aria-label="Settings">
+    <svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+    <span class="bottom-nav__label">Settings</span>
+  </a>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TOAST CONTAINER
+═══════════════════════════════════════════════════════════════ -->
+<div id="toast-container" class="toast-container" aria-live="assertive" aria-atomic="false" role="status"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MODAL OVERLAY
+═══════════════════════════════════════════════════════════════ -->
+<div id="modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-label="Modal dialog" style="display:none">
+  <div id="modal-content" class="modal" role="document"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     DAILY LOSS LOCK OVERLAY
+═══════════════════════════════════════════════════════════════ -->
+<div id="loss-lock-overlay" class="loss-lock-overlay" style="display:none" role="alertdialog" aria-modal="true" aria-label="Daily loss limit breached — trading halted">
+  <div class="loss-lock-inner">
+    <div class="loss-lock-icon" aria-hidden="true">🛑</div>
+    <h1 class="heading-xl loss-lock-heading">DAILY LOSS LIMIT BREACHED</h1>
+    <p class="loss-lock-amount price" id="loss-lock-amount">-₹0</p>
+    <p class="loss-lock-desc">Trading halted for today. Your discipline is your edge — come back tomorrow.</p>
+    <div class="loss-lock-actions">
+      <button class="btn btn-ghost" onclick="window.APP && window.APP.dismissLossLock()" aria-label="Override loss lock — requires confirmation">Override (confirm)</button>
+    </div>
+    <p class="loss-lock-warning">Overriding removes today's trading halt. Use with caution.</p>
   </div>
-</aside>
+</div>
 
-<!-- Toast -->
-<div class="toast" id="toast"></div>
-
-<!-- uPlot -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.min.css">
+<!-- ═══════════════════════════════════════════════════════════════
+     SCRIPTS (order matters)
+═══════════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.iife.min.js"></script>
+<script src="storage.js"></script>
+<script src="ui.js"></script>
+<script src="charts.js"></script>
+<script src="signals.js"></script>
+<script src="journal.js"></script>
+<script src="replay.js"></script>
+<script src="heatmap.js"></script>
+<script src="app.js"></script>
 
-<script>
-'use strict';
-// ── Helpers ───────────────────────────────────────────────────────────────────
-const $ = id => document.getElementById(id);
-const f = {
-  n2:  v => v == null ? '—' : Number(v).toFixed(2),
-  pct: v => v == null ? '—' : (v * 100).toFixed(1) + '%',
-  inr: v => { if (v == null) return '—'; const s = Math.abs(v).toLocaleString('en-IN',{maximumFractionDigits:0}); return (v>=0?'+₹':'−₹')+s; },
-  ts:  v => { if (!v) return '—'; try { return new Date(v).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}); } catch { return v; } },
-  price: v => v==null ? '—' : '₹'+Number(v).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}),
-};
-const clr = v => v > 0 ? 'pos' : v < 0 ? 'neg' : 'dim';
-
-function showToast(msg, dur=3500) {
-  const t = $('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), dur);
-}
-
-// ── Tab routing ───────────────────────────────────────────────────────────────
-document.querySelectorAll('.tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    $('pane-'+btn.dataset.tab).classList.add('active');
-    if (btn.dataset.tab === 'scanner') onScannerOpen();
-    if (btn.dataset.tab === 'journal') onJournalOpen();
-  });
-});
-
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
-  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id==='pane-'+name));
-  if (name === 'journal') onJournalOpen();
-}
-
-// ── Strategy display names ────────────────────────────────────────────────────
-const DESC = {
-  vwap_reversal:          'Fade >1% deviation from VWAP back to mean',
-  opening_range_breakout: 'First 15-min range breakout with volume',
-  supertrend_ema:         'Supertrend bullish flip above EMA(20)',
-  rsi_divergence:         'Bullish divergence: price LL + RSI HL',
-  gap_fade:               'Fade 0.8–2% gap-down opens to prev close',
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// TAB 1 — STRATEGIES leaderboard
-// ═══════════════════════════════════════════════════════════════════════════════
-function skeletonRows() {
-  return Array(5).fill(0).map(() => `
-    <tr>
-      <td><span class="sk" style="width:160px;height:16px"></span></td>
-      ${Array(6).fill('<td><span class="sk" style="width:48px;height:13px"></span></td>').join('')}
-    </tr>`).join('');
-}
-
-async function loadLeaderboard() {
-  $('lb-body').innerHTML = skeletonRows();
-  try {
-    const r = await fetch('/public/data/leaderboard.json?_='+Date.now());
-    if (!r.ok) throw new Error(r.status);
-    const { leaderboard=[], generated_at } = await r.json();
-    $('lb-ts').textContent = generated_at ? 'Updated '+f.ts(generated_at)+' IST' : '';
-
-    if (!leaderboard.length) {
-      $('lb-body').innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:40px 0">
-        No results yet — run <code style="color:var(--green)">python -m backtest.runner --strategy all</code>
-      </td></tr>`;
-      return;
-    }
-
-    $('lb-body').innerHTML = leaderboard.map((s,i) => `
-      <tr data-key="${s.strategy_key}">
-        <td>
-          <div style="display:flex;align-items:flex-start">
-            <span class="badge ${i===0?'no1':''}">${i+1}</span>
-            <div><span class="sname">${s.strategy_name}</span><span class="sdesc">${DESC[s.strategy_key]||''}</span></div>
-          </div>
-        </td>
-        <td class="${clr(s.sharpe)}">${f.n2(s.sharpe)}</td>
-        <td>${f.pct(s.win_rate)}</td>
-        <td class="${clr((s.profit_factor||0)-1)}">${f.n2(s.profit_factor)}</td>
-        <td class="neg">${s.max_drawdown!=null?(s.max_drawdown*100).toFixed(1)+'%':'—'}</td>
-        <td class="${clr(s.expectancy_per_lakh)}">${f.inr(s.expectancy_per_lakh)}</td>
-        <td class="dim">${s.total_trades??0}</td>
-      </tr>`).join('');
-
-    $('lb-body').querySelectorAll('tr[data-key]').forEach(row => {
-      row.tabIndex = 0;
-      const open = () => openDrawer(row.dataset.key, row);
-      row.addEventListener('click', open);
-      row.addEventListener('keydown', e => (e.key==='Enter'||e.key===' ') && open());
-    });
-  } catch {
-    $('lb-body').innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:40px 0">
-      Data unavailable — run the backtest runner to generate results.</td></tr>`;
-    $('lb-ts').textContent = '';
-  }
-}
-
-// ── Drawer ────────────────────────────────────────────────────────────────────
-let _chart = null;
-
-function openDrawer(key, row) {
-  document.querySelectorAll('#lb-body tr').forEach(r => r.classList.remove('sel'));
-  row.classList.add('sel');
-  $('dtitle').textContent = row.querySelector('.sname').textContent;
-  $('dsub').textContent   = 'Loading…';
-  $('dmgrid').innerHTML   = Array(8).fill(0).map(() => `
-    <div class="mcard">
-      <div class="mlabel"><span class="sk" style="width:54px"></span></div>
-      <div class="mval"><span class="sk" style="width:72px;height:22px;display:block;margin-top:6px"></span></div>
-    </div>`).join('');
-  $('dchart').innerHTML = $('dsymbols').innerHTML = $('dtrades').innerHTML = '';
-  if (_chart) { _chart.destroy(); _chart = null; }
-  $('overlay').classList.add('on');
-  $('drawer').classList.add('on');
-  document.body.style.overflow = 'hidden';
-  $('dclose').focus();
-  fetchStrategy(key);
-}
-
-function closeDrawer() {
-  $('overlay').classList.remove('on');
-  $('drawer').classList.remove('on');
-  document.body.style.overflow = '';
-  document.querySelectorAll('#lb-body tr').forEach(r => r.classList.remove('sel'));
-  if (_chart) { _chart.destroy(); _chart = null; }
-}
-
-$('dclose').addEventListener('click', closeDrawer);
-$('overlay').addEventListener('click', closeDrawer);
-document.addEventListener('keydown', e => e.key==='Escape' && closeDrawer());
-
-async function fetchStrategy(key) {
-  try {
-    const r = await fetch(`/public/data/results/${key}.json?_=`+Date.now());
-    if (!r.ok) throw new Error(r.status);
-    renderDrawer(await r.json());
-  } catch {
-    $('dsub').textContent = 'Results unavailable.';
-    $('dmgrid').innerHTML = '<div style="color:var(--muted);padding:12px;grid-column:1/-1">Run the backtest runner first.</div>';
-  }
-}
-
-function renderDrawer(data) {
-  const s=data.summary||{}, trades=data.trades||[], perSym=data.per_symbol||{};
-  $('dsub').textContent = `${data.start||'?'} → ${data.end||'?'} · ${data.symbols_run||0} symbols · ${f.ts(data.generated_at)} IST`;
-  const cards = [
-    {l:'Total P&L',     v:f.inr(s.total_pnl),          c:clr(s.total_pnl)},
-    {l:'Sharpe',        v:f.n2(s.sharpe),               c:clr(s.sharpe)},
-    {l:'Win Rate',      v:f.pct(s.win_rate),             c:''},
-    {l:'Profit Factor', v:f.n2(s.profit_factor),         c:clr((s.profit_factor||0)-1)},
-    {l:'Max Drawdown',  v:s.max_drawdown!=null?(s.max_drawdown*100).toFixed(1)+'%':'—', c:'neg'},
-    {l:'Exp. / ₹1L',   v:f.inr(s.expectancy_per_lakh), c:clr(s.expectancy_per_lakh)},
-    {l:'Avg Win',       v:f.inr(s.avg_win),              c:'pos'},
-    {l:'Avg Loss',      v:f.inr(s.avg_loss),             c:'neg'},
-  ];
-  $('dmgrid').innerHTML = cards.map(m=>`<div class="mcard"><div class="mlabel">${m.l}</div><div class="mval ${m.c}">${m.v}</div></div>`).join('');
-  const eq = s.equity_curve||[];
-  if (eq.length>2) renderEquityCurve(eq); else $('dchart').innerHTML='<div style="color:var(--muted);text-align:center;padding:32px 0">No trades</div>';
-  const syms = Object.entries(perSym).filter(([,v])=>v&&(v.total_trades||0)>0).sort(([,a],[,b])=>(b.total_pnl||0)-(a.total_pnl||0));
-  $('dsymbols').innerHTML = syms.length ? syms.map(([sym,ps])=>`
-    <div class="scard">
-      <div class="sym">${sym.replace('.NS','')}</div>
-      <div class="spnl ${clr(ps.total_pnl)}">${f.inr(ps.total_pnl)}</div>
-      <div class="smeta">${ps.total_trades||0} trades · ${f.pct(ps.win_rate)} WR</div>
-    </div>`).join('') : '<div style="color:var(--muted);font-size:12px">No per-symbol data</div>';
-  const last20 = trades.slice(-20).reverse();
-  $('dtrades').innerHTML = last20.length ? last20.map(t=>`
-    <tr>
-      <td>${f.ts(t.entry_time)}</td>
-      <td style="color:var(--text)">${(t.symbol||'').replace('.NS','')}</td>
-      <td>${t.entry_price!=null?Number(t.entry_price).toFixed(1):'—'}</td>
-      <td>${t.exit_price!=null?Number(t.exit_price).toFixed(1):'—'}</td>
-      <td>${t.qty??'—'}</td>
-      <td class="${clr(t.pnl)}">${f.inr(t.pnl)}</td>
-      <td style="color:var(--muted);font-size:11px">${t.exit_reason||'—'}</td>
-    </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px 0">No trades</td></tr>';
-}
-
-function renderEquityCurve(eq) {
-  $('dchart').innerHTML = '';
-  if (_chart) { _chart.destroy(); _chart = null; }
-  const w = $('dchart').clientWidth || 620;
-  const up = eq[eq.length-1] >= eq[0];
-  _chart = new uPlot({
-    width:w, height:158,
-    cursor:{show:true,x:true,y:false}, legend:{show:false}, select:{show:false},
-    axes:[{show:false},{stroke:'#333',grid:{stroke:'#1a1a1a',width:1},ticks:{show:false},size:72,
-      values:(_,v)=>v.map(x=>x==null?'':'₹'+Math.round(x).toLocaleString('en-IN')),font:'11px DM Sans'}],
-    series:[{},{stroke:up?'#B8FF57':'#FF4D4D',width:1.8,fill:up?'rgba(184,255,87,.06)':'rgba(255,77,77,.06)'}],
-    scales:{x:{time:false}},
-  }, [Float64Array.from({length:eq.length},(_,i)=>i), Float64Array.from(eq)], $('dchart'));
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// TAB 2 — LIVE SCANNER
-// ═══════════════════════════════════════════════════════════════════════════════
-function isMarketOpen() {
-  const ist = new Date(new Date().toLocaleString('en-US', {timeZone:'Asia/Kolkata'}));
-  const day = ist.getDay();
-  if (day===0||day===6) return false;
-  const mins = ist.getHours()*60 + ist.getMinutes();
-  return mins >= 9*60+15 && mins <= 15*60+30;
-}
-
-let _scanRunning = false;
-let _refreshInterval = null;
-let _countdownInterval = null;
-let _countdown = 60;
-
-function updateMarketBanner() {
-  const open = isMarketOpen();
-  $('sc-dot').classList.toggle('open', open);
-  $('sc-status-txt').textContent = open ? 'Market Open' : 'Market Closed';
-  $('sc-closed').style.display   = open ? 'none' : 'block';
-}
-
-function onScannerOpen() {
-  updateMarketBanner();
-}
-
-async function runScan() {
-  if (_scanRunning) return;
-  _scanRunning = true;
-  clearAutoRefresh();
-
-  const btn      = $('sc-run');
-  const strategy = $('sc-strategy').value;
-  btn.disabled   = true;
-  btn.textContent= 'SCANNING…';
-  $('sc-info').textContent = '';
-  $('sc-results').innerHTML = scanSkeleton();
-
-  try {
-    const r = await fetch('/api/scan', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({strategy}),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(()=>({detail:'Scan failed'}));
-      throw new Error(err.detail || r.status);
-    }
-    const data = await r.json();
-    updateMarketBanner();
-    renderSignals(data, strategy);
-    if (isMarketOpen()) startAutoRefresh(strategy);
-  } catch(e) {
-    $('sc-results').innerHTML = `<div class="no-sig"><div class="no-sig-h">ERROR</div><div style="font-size:12px;margin-top:4px">${e.message}</div></div>`;
-    $('sc-info').textContent = 'Scan failed';
-  } finally {
-    _scanRunning = false;
-    btn.disabled   = false;
-    btn.textContent= '⬤ RUN SCAN';
-  }
-}
-
-function scanSkeleton() {
-  return '<div class="sig-grid">'+Array(3).fill(0).map(()=>`
-    <div class="sig-card">
-      <div class="sig-top">
-        <div><span class="sk" style="width:100px;height:20px;display:block"></span><span class="sk" style="width:150px;height:12px;display:block;margin-top:6px"></span></div>
-        <div><span class="sk" style="width:80px;height:20px;display:block"></span></div>
-      </div>
-      <div class="sig-prices">${Array(4).fill('<div class="sig-p"><span class="sk" style="width:60px;height:15px;display:block;margin-top:4px"></span></div>').join('')}</div>
-    </div>`).join('')+'</div>';
-}
-
-function renderSignals(data, strategyKey) {
-  const sigs   = data.signals || [];
-  const scAt   = data.scanned_at ? f.ts(data.scanned_at)+' IST' : '';
-  const count  = sigs.length;
-  $('sc-info').textContent = count ? `${count} signal${count!==1?'s':''} · ${scAt}` : `No signals · ${scAt}`;
-
-  if (!count) {
-    $('sc-results').innerHTML = `<div class="no-sig">
-      <div class="no-sig-h">NO SIGNALS</div>
-      <div>${isMarketOpen()?'No setups right now. Auto-refreshing in 60s.':'No active signals from last session.'}</div>
-    </div>`;
-    return;
-  }
-
-  $('sc-results').innerHTML = '<div class="sig-grid">'+sigs.map(s=>signalCard(s, data.strategy||strategyKey)).join('')+'</div>';
-
-  document.querySelectorAll('.log-btn[data-sig]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      try { logTrade(JSON.parse(btn.dataset.sig)); } catch{}
-    });
-  });
-}
-
-function signalCard(s, stratName) {
-  const rr    = s.rr!=null ? Number(s.rr).toFixed(2) : '—';
-  const rrCls = s.rr!=null && s.rr>=1 ? 'pos' : '';
-  const ago   = s.bars_ago!=null ? `· ${s.bars_ago} bar${s.bars_ago!==1?'s':''} ago` : '';
-  const sigEnc= JSON.stringify(s).replace(/"/g,'&quot;');
-  return `
-  <div class="sig-card">
-    <div class="sig-top">
-      <div>
-        <div class="sig-sym">${(s.symbol||'').replace('.NS','')}</div>
-        <div class="sig-meta">${s.name||''} · ${s.sector||''}</div>
-      </div>
-      <div class="sig-ltp">
-        <div class="sig-price">${f.price(s.ltp)}</div>
-      </div>
-    </div>
-    <div class="sig-prices">
-      <div class="sig-p"><div class="lbl">Entry</div><div class="val">${s.entry!=null?'₹'+Number(s.entry).toFixed(1):'—'}</div></div>
-      <div class="sig-p"><div class="lbl">Stop Loss</div><div class="val neg">${s.sl!=null?'₹'+Number(s.sl).toFixed(1):'—'}</div></div>
-      <div class="sig-p"><div class="lbl">Target</div><div class="val pos">${s.target!=null?'₹'+Number(s.target).toFixed(1):'—'}</div></div>
-      <div class="sig-p"><div class="lbl">R : R</div><div class="val ${rrCls}">${rr}</div></div>
-    </div>
-    <div class="sig-foot">
-      <span class="sig-badge">LONG · ${stratName}</span>
-      <span class="sig-time">${f.ts(s.signal_time)} IST ${ago}</span>
-      <button class="log-btn" data-sig="${sigEnc}">+ Log Trade</button>
-    </div>
-  </div>`;
-}
-
-function startAutoRefresh(strategy) {
-  clearAutoRefresh();
-  _countdown = 60;
-  _countdownInterval = setInterval(() => {
-    _countdown--;
-    if (isMarketOpen() && _countdown > 0) {
-      $('sc-info').textContent && ($('sc-info').textContent = $('sc-info').textContent.replace(/Auto.*/,'') + ` · Auto in ${_countdown}s`);
-    }
-    if (_countdown <= 0) {
-      clearInterval(_countdownInterval);
-      if (isMarketOpen()) runScan();
-    }
-  }, 1000);
-}
-
-function clearAutoRefresh() {
-  clearInterval(_refreshInterval);
-  clearInterval(_countdownInterval);
-}
-
-// ── Log Trade → pre-fills Journal ────────────────────────────────────────────
-function logTrade(sig) {
-  const draft = {
-    date:     (sig.signal_time||new Date().toISOString()).slice(0,10),
-    symbol:   (sig.symbol||'').replace('.NS',''),
-    strategy: sig.indicator || '',
-    entry:    sig.entry  != null ? String(sig.entry)  : '',
-    sl:       sig.sl     != null ? String(sig.sl)     : '',
-    target:   sig.target != null ? String(sig.target) : '',
-    rr:       sig.rr     != null ? String(sig.rr)     : '',
-    notes:    `Signal: ${sig.signal_type||'LONG'} · R:R ${sig.rr!=null?sig.rr:'—'} · ${sig.indicator||''}`,
-    _source:  'scanner',
-  };
-  localStorage.setItem('brainee_pending_trade', JSON.stringify(draft));
-  switchTab('journal');
-  showToast(`${(sig.symbol||'').replace('.NS','')} logged — fill exit details in Journal`);
-}
-
-// ── Wire scanner button ───────────────────────────────────────────────────────
-$('sc-run').addEventListener('click', runScan);
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// TAB 3 — BACKTEST LAB
-// ═══════════════════════════════════════════════════════════════════════════════
-let _btChart = null;
-
-function initBacktest() {
-  const today = new Date();
-  const pad   = n => String(n).padStart(2,'0');
-  const fmt   = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  const start = new Date(today); start.setDate(today.getDate()-14);
-  $('bt-end').max   = fmt(today);
-  $('bt-end').value = fmt(today);
-  $('bt-start').max = fmt(today);
-  $('bt-start').value = fmt(start);
-}
-
-async function runBacktest() {
-  const btn      = $('bt-run');
-  const strategy = $('bt-strategy').value;
-  const start    = $('bt-start').value;
-  const end      = $('bt-end').value;
-  const capital  = Number($('bt-capital').value) || 100000;
-  const symRaw   = $('bt-sym-input').value.trim();
-  const symbols  = symRaw ? symRaw.split(',').map(s=>s.trim()).filter(Boolean) : null;
-
-  if (!start || !end) { showToast('Set start and end dates.'); return; }
-  const spanDays = (new Date(end) - new Date(start)) / 86400000;
-  if (spanDays < 1) { showToast('End date must be after start date.'); return; }
-  if (spanDays > 60) { showToast('Date range cannot exceed 60 days.'); return; }
-
-  btn.disabled = true;
-  btn.textContent = 'RUNNING…';
-  $('bt-loading').style.display = 'block';
-  $('bt-results').style.display = 'none';
-  $('bt-loading-sub').textContent = symbols
-    ? `Fetching 5-min data for ${symbols.length} symbol${symbols.length!==1?'s':''}`
-    : 'Fetching 5-min data for all 50 Nifty symbols — this may take 30–90 s';
-
-  try {
-    const body = { strategy, start, end, capital };
-    if (symbols) body.symbols = symbols;
-    const r = await fetch('/api/backtest', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(body),
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || r.status);
-    renderBacktest(data);
-    $('bt-results').style.display = 'block';
-    $('bt-results').scrollIntoView({behavior:'smooth',block:'start'});
-  } catch(e) {
-    showToast('Backtest error: '+e.message, 5000);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '⬤ RUN BACKTEST';
-    $('bt-loading').style.display = 'none';
-  }
-}
-
-function renderBacktest(data) {
-  const s = data.summary || {};
-  const trades = data.trades || [];
-  const perSym = data.per_symbol || {};
-
-  // Metric cards
-  const cards = [
-    {l:'Total P&L',     v:f.inr(s.total_pnl),          c:clr(s.total_pnl)},
-    {l:'Sharpe',        v:f.n2(s.sharpe),               c:clr(s.sharpe)},
-    {l:'Win Rate',      v:f.pct(s.win_rate),             c:''},
-    {l:'Profit Factor', v:f.n2(s.profit_factor),         c:clr((s.profit_factor||0)-1)},
-    {l:'Max Drawdown',  v:s.max_drawdown!=null?(s.max_drawdown*100).toFixed(1)+'%':'—', c:'neg'},
-    {l:'Exp. / ₹1L',   v:f.inr(s.expectancy_per_lakh), c:clr(s.expectancy_per_lakh)},
-    {l:'Avg Win',       v:f.inr(s.avg_win),              c:'pos'},
-    {l:'Total Trades',  v:String(s.total_trades??0),     c:''},
-  ];
-  $('bt-mgrid').innerHTML = cards.map(m=>`<div class="mcard"><div class="mlabel">${m.l}</div><div class="mval ${m.c}">${m.v}</div></div>`).join('');
-
-  // Equity curve
-  const eq = s.equity_curve || [];
-  window._btLastEq = eq.length > 2 ? eq : null;
-  if (eq.length > 2) renderBtChart(eq);
-  else $('bt-chart').innerHTML = '<div style="color:var(--muted);text-align:center;padding:32px 0">No trades</div>';
-
-  // Exit breakdown
-  const exits = s.exit_reasons || {};
-  const exitTotal = Object.values(exits).reduce((a,b)=>a+b,0);
-  const exitLabels = {sl:'Stop Loss',target:'Target',signal:'Signal',squareoff:'Squareoff',end_of_data:'End of Data'};
-  $('bt-exits').innerHTML = exitTotal
-    ? Object.entries(exits).sort(([,a],[,b])=>b-a).map(([k,n])=>`
-        <div class="bt-exit-pill">
-          <span class="bep-n">${n}</span>
-          <span class="bep-l">${exitLabels[k]||k} (${exitTotal?Math.round(n/exitTotal*100):0}%)</span>
-        </div>`).join('')
-    : '<span style="color:var(--muted);font-size:12px">No trades</span>';
-
-  // By symbol
-  const syms = Object.entries(perSym).filter(([,v])=>v&&(v.total_trades||0)>0).sort(([,a],[,b])=>(b.total_pnl||0)-(a.total_pnl||0));
-  $('bt-sym-grid').innerHTML = syms.length ? syms.map(([sym,ps])=>`
-    <div class="scard">
-      <div class="sym">${sym.replace('.NS','')}</div>
-      <div class="spnl ${clr(ps.total_pnl)}">${f.inr(ps.total_pnl)}</div>
-      <div class="smeta">${ps.total_trades||0} trades · ${f.pct(ps.win_rate)} WR</div>
-    </div>`).join('') : '<div style="color:var(--muted);font-size:12px">No per-symbol data</div>';
-
-  // Last 20 trades
-  const last20 = trades.slice(-20).reverse();
-  $('bt-trades').innerHTML = last20.length ? last20.map(t=>`
-    <tr>
-      <td>${f.ts(t.entry_time)}</td>
-      <td style="color:var(--text)">${(t.symbol||'').replace('.NS','')}</td>
-      <td>${t.entry_price!=null?Number(t.entry_price).toFixed(1):'—'}</td>
-      <td>${t.exit_price!=null?Number(t.exit_price).toFixed(1):'—'}</td>
-      <td>${t.qty??'—'}</td>
-      <td class="${clr(t.pnl)}">${f.inr(t.pnl)}</td>
-      <td style="color:var(--muted);font-size:11px">${t.exit_reason||'—'}</td>
-    </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px 0">No trades</td></tr>';
-}
-
-function renderBtChart(eq) {
-  $('bt-chart').innerHTML = '';
-  if (_btChart) { _btChart.destroy(); _btChart = null; }
-  const w  = $('bt-chart').clientWidth || 800;
-  const up = eq[eq.length-1] >= eq[0];
-  _btChart = new uPlot({
-    width:w, height:160,
-    cursor:{show:true,x:true,y:false}, legend:{show:false}, select:{show:false},
-    axes:[{show:false},{stroke:'#333',grid:{stroke:'#1a1a1a',width:1},ticks:{show:false},size:72,
-      values:(_,v)=>v.map(x=>x==null?'':'₹'+Math.round(x).toLocaleString('en-IN')),font:'11px DM Sans'}],
-    series:[{},{stroke:up?'#B8FF57':'#FF4D4D',width:1.8,fill:up?'rgba(184,255,87,.06)':'rgba(255,77,77,.06)'}],
-    scales:{x:{time:false}},
-  }, [Float64Array.from({length:eq.length},(_,i)=>i), Float64Array.from(eq)], $('bt-chart'));
-}
-
-$('bt-run').addEventListener('click', runBacktest);
-
-// Destroy backtest chart on tab switch to avoid stale canvas size
-document.querySelectorAll('.tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (btn.dataset.tab !== 'backtest' && _btChart) { _btChart.destroy(); _btChart = null; }
-    if (btn.dataset.tab === 'backtest') {
-      const eq = window._btLastEq;
-      if (eq && $('bt-results').style.display !== 'none') renderBtChart(eq);
-    }
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// TAB 4 — JOURNAL  (pure localStorage, no server)
-// ═══════════════════════════════════════════════════════════════════════════════
-const JNL_KEY     = 'brainee_journal';
-const PENDING_KEY = 'brainee_pending_trade';
-const STRAT_NAMES = {vwap_reversal:'VWAP',opening_range_breakout:'ORB',supertrend_ema:'ST+EMA',rsi_divergence:'RSI Div',gap_fade:'Gap Fade',manual:'Manual'};
-
-function jnlLoad()        { return JSON.parse(localStorage.getItem(JNL_KEY)||'[]'); }
-function jnlSave(trades)  { localStorage.setItem(JNL_KEY, JSON.stringify(trades)); }
-function jnlTodayStr()    { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
-function jnlPnl(t)        { return (t.exit!=null&&t.entry!=null) ? (t.exit-t.entry)*(t.qty||1) : null; }
-
-function onJournalOpen() {
-  const raw = localStorage.getItem(PENDING_KEY);
-  if (raw) {
-    localStorage.removeItem(PENDING_KEY);
-    try { jnlFillForm(JSON.parse(raw)); showToast('Pre-filled from scanner — add exit price when done'); }
-    catch {}
-  }
-  jnlRender();
-}
-
-function jnlFillForm(d) {
-  $('jnl-edit-id').value  = '';
-  $('jnl-form-title').textContent = 'Log Trade';
-  $('jnl-save').textContent = '+ ADD TRADE';
-  $('jnl-cancel').style.display = 'none';
-  $('jnl-date').value     = d.date     || jnlTodayStr();
-  $('jnl-symbol').value   = (d.symbol  || '').replace('.NS','').toUpperCase();
-  $('jnl-strategy').value = d.strategy || '';
-  $('jnl-qty').value      = d.qty      || '';
-  $('jnl-entry').value    = d.entry    || '';
-  $('jnl-exit').value     = d.exit     || '';
-  $('jnl-sl').value       = d.sl       || '';
-  $('jnl-target').value   = d.target   || '';
-  $('jnl-notes').value    = d.notes    || '';
-}
-
-function jnlClearForm() {
-  $('jnl-edit-id').value  = '';
-  $('jnl-form-title').textContent = 'Log Trade';
-  $('jnl-save').textContent = '+ ADD TRADE';
-  $('jnl-cancel').style.display = 'none';
-  ['jnl-symbol','jnl-qty','jnl-entry','jnl-exit','jnl-sl','jnl-target','jnl-notes'].forEach(id => $(id).value='');
-  $('jnl-date').value     = jnlTodayStr();
-  $('jnl-strategy').value = '';
-}
-
-function jnlAddOrUpdate() {
-  const editId  = $('jnl-edit-id').value;
-  const symbol  = $('jnl-symbol').value.trim().toUpperCase().replace('.NS','');
-  const entry   = parseFloat($('jnl-entry').value);
-  if (!symbol)              { showToast('Symbol is required.');          return; }
-  if (isNaN(entry)||entry<=0){ showToast('Valid entry price required.'); return; }
-
-  const num = id => { const v=parseFloat($(id).value); return ($(id).value===''||isNaN(v)) ? null : v; };
-  const trade = {
-    id:       editId ? Number(editId) : Date.now(),
-    date:     $('jnl-date').value || jnlTodayStr(),
-    symbol,
-    strategy: $('jnl-strategy').value,
-    qty:      parseInt($('jnl-qty').value) || 1,
-    entry,
-    exit:     num('jnl-exit'),
-    sl:       num('jnl-sl'),
-    target:   num('jnl-target'),
-    notes:    $('jnl-notes').value.trim(),
-  };
-
-  const trades = jnlLoad();
-  if (editId) {
-    const idx = trades.findIndex(t=>t.id===trade.id);
-    if (idx>=0) trades[idx]=trade; else trades.push(trade);
-    showToast('Trade updated.');
-  } else {
-    trades.push(trade);
-    showToast('Trade logged.');
-  }
-  jnlSave(trades);
-  jnlClearForm();
-  jnlRender();
-}
-
-function jnlDelete(id) {
-  if (!confirm('Delete this trade?')) return;
-  jnlSave(jnlLoad().filter(t=>t.id!==id));
-  jnlRender();
-}
-
-function jnlEditMode(trade) {
-  $('jnl-edit-id').value  = trade.id;
-  $('jnl-form-title').textContent = 'Edit Trade';
-  $('jnl-save').textContent = '✓ SAVE CHANGES';
-  $('jnl-cancel').style.display = '';
-  jnlFillForm(trade);
-  $('jnl-form-wrap').scrollIntoView({behavior:'smooth',block:'start'});
-}
-
-function jnlFilteredTrades() {
-  const strat = $('jnl-filter-strat').value;
-  const from  = $('jnl-filter-from').value;
-  const to    = $('jnl-filter-to').value;
-  return jnlLoad().filter(t => {
-    if (strat && t.strategy !== strat) return false;
-    if (from  && t.date < from)        return false;
-    if (to    && t.date > to)          return false;
-    return true;
-  });
-}
-
-function jnlRender() {
-  const trades = jnlFilteredTrades();
-
-  // Summary cards (closed trades only)
-  const closed = trades.filter(t=>t.exit!=null);
-  const pnls   = closed.map(jnlPnl).filter(v=>v!=null);
-  const wins   = pnls.filter(p=>p>0);
-  const losses = pnls.filter(p=>p<=0);
-  const totalPnl = pnls.reduce((a,b)=>a+b,0);
-  const stats = [
-    {l:'Total P&L',  v:pnls.length?f.inr(totalPnl):'—',   c:pnls.length?clr(totalPnl):''},
-    {l:'Win Rate',   v:closed.length?f.pct(wins.length/closed.length):'—', c:''},
-    {l:'Avg Win',    v:wins.length?f.inr(wins.reduce((a,b)=>a+b,0)/wins.length):'—',   c:'pos'},
-    {l:'Avg Loss',   v:losses.length?f.inr(losses.reduce((a,b)=>a+b,0)/losses.length):'—', c:'neg'},
-  ];
-  $('jnl-stats').innerHTML = stats.map(m=>`<div class="mcard"><div class="mlabel">${m.l}</div><div class="mval ${m.c}">${m.v}</div></div>`).join('');
-
-  // Table
-  if (!trades.length) {
-    $('jnl-table-wrap').innerHTML = `<div class="jnl-empty"><div class="jnl-empty-h">NO TRADES YET</div><div>Log trades from the scanner, or fill the form above.</div></div>`;
-    return;
-  }
-
-  const rows = [...trades].reverse().map(t=>{
-    const pnl = jnlPnl(t);
-    const rr  = (t.sl&&t.target&&t.entry&&t.entry>t.sl) ? ((t.target-t.entry)/(t.entry-t.sl)).toFixed(2) : '—';
-    return `<tr>
-      <td>${t.date||'—'}</td>
-      <td style="color:var(--text);font-weight:500">${t.symbol||'—'}</td>
-      <td style="color:var(--muted);font-size:11px">${STRAT_NAMES[t.strategy]||t.strategy||'—'}</td>
-      <td>${t.entry!=null?'₹'+Number(t.entry).toFixed(1):'—'}</td>
-      <td>${t.exit!=null?'₹'+Number(t.exit).toFixed(1):'<span class="jnl-open">open</span>'}</td>
-      <td>${t.qty||'—'}</td>
-      <td class="${pnl!=null?clr(pnl):''}">${pnl!=null?f.inr(pnl):'—'}</td>
-      <td>${rr}</td>
-      <td style="color:var(--muted);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(t.notes||'').replace(/"/g,'&quot;')}">${t.notes||''}</td>
-      <td><div class="jnl-actions">
-        <button class="jnl-edit" data-id="${t.id}" title="Edit">✎</button>
-        <button class="jnl-del"  data-id="${t.id}" title="Delete">✕</button>
-      </div></td>
-    </tr>`;
-  }).join('');
-
-  $('jnl-table-wrap').innerHTML = `<div style="overflow-x:auto"><table class="tlog">
-    <thead><tr>
-      <th style="text-align:left">Date</th><th style="text-align:left">Symbol</th>
-      <th style="text-align:left">Strategy</th><th>Entry</th><th>Exit</th>
-      <th>Qty</th><th>P&amp;L</th><th>R:R</th>
-      <th style="text-align:left">Notes</th><th></th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table></div>`;
-
-  $('jnl-table-wrap').querySelectorAll('.jnl-del').forEach(btn=>
-    btn.addEventListener('click',()=>jnlDelete(Number(btn.dataset.id))));
-  $('jnl-table-wrap').querySelectorAll('.jnl-edit').forEach(btn=>
-    btn.addEventListener('click',()=>{ const t=jnlLoad().find(t=>t.id===Number(btn.dataset.id)); if(t) jnlEditMode(t); }));
-}
-
-function jnlExportCSV() {
-  const trades = jnlFilteredTrades();
-  if (!trades.length) { showToast('No trades to export.'); return; }
-  const hdr = 'Date,Symbol,Strategy,Qty,Entry,Exit,SL,Target,P&L,R:R,Notes';
-  const rows = trades.map(t=>{
-    const pnl = jnlPnl(t);
-    const rr  = (t.sl&&t.target&&t.entry&&t.entry>t.sl)?((t.target-t.entry)/(t.entry-t.sl)).toFixed(2):'';
-    return [t.date,t.symbol,t.strategy||'',t.qty,t.entry,t.exit??'',t.sl??'',t.target??'',pnl!=null?pnl.toFixed(2):'',rr,`"${(t.notes||'').replace(/"/g,'""')}"`].join(',');
-  });
-  const a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent([hdr,...rows].join('\n'));
-  a.download=`brainee_journal_${jnlTodayStr()}.csv`;
-  a.click();
-}
-
-$('jnl-save').addEventListener('click', jnlAddOrUpdate);
-$('jnl-cancel').addEventListener('click', jnlClearForm);
-$('jnl-export').addEventListener('click', jnlExportCSV);
-['jnl-filter-strat','jnl-filter-from','jnl-filter-to'].forEach(id=>$(id).addEventListener('change',jnlRender));
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Boot
-// ═══════════════════════════════════════════════════════════════════════════════
-loadLeaderboard();
-updateMarketBanner();   // set dot state on page load even before scanner tab opens
-initBacktest();         // set default dates on the backtest form
-$('jnl-date').value = jnlTodayStr();
-</script>
 </body>
 </html>

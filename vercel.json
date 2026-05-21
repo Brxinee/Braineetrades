@@ -15,8 +15,7 @@
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/app.py" },
     { "src": "/public/(.*)", "dest": "/public/$1" },
-    { "src": "/",           "dest": "/frontend/index.html" },
-    { "src": "/(.*)",       "dest": "/frontend/$1" }
+    { "src": "/(.*)", "dest": "/$1" }
   ],
   "headers": [
     {
@@ -25,12 +24,6 @@
         { "key": "Access-Control-Allow-Origin",  "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
-      ]
-    },
-    {
-      "source": "/public/data/:file*",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=300" }
       ]
     }
   ],
