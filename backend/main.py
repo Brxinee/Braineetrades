@@ -495,20 +495,31 @@ async def get_regime():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _resolve_strategy_key(key: str) -> str:
-    """
-    Resolve user-supplied strategy keys to REGISTRY keys.
-    Accepts 'orb15'/'orb' as aliases for 'opening_range_breakout', etc.
-    """
+    """Resolve user-supplied strategy keys to REGISTRY keys."""
     aliases = {
-        "orb":                  "opening_range_breakout",
-        "orb15":                "opening_range_breakout",
-        "orb_15":               "opening_range_breakout",
-        "vwap":                 "vwap_reversal",
-        "supertrend":           "supertrend_ema",
-        "st_ema":               "supertrend_ema",
-        "rsi":                  "rsi_divergence",
-        "divergence":           "rsi_divergence",
-        "gap":                  "gap_fade",
+        # ORB variants
+        "orb":                  "orb15",
+        "orb_15":               "orb15",
+        "opening_range_breakout": "orb15",
+        "orb_30":               "orb30",
+        # VWAP variants
+        "vwap":                 "vwap_mean_reversion",
+        "vwap_reversal":        "vwap_mean_reversion",
+        "vwap_mean_rev":        "vwap_mean_reversion",
+        # Supertrend → closest available
+        "supertrend":           "cpr_vwap_confluence",
+        "supertrend_ema":       "cpr_vwap_confluence",
+        "st_ema":               "cpr_vwap_confluence",
+        # CPR variants
+        "cpr":                  "cpr_vwap_confluence",
+        "cpr_vwap":             "cpr_vwap_confluence",
+        # Gap variants
+        "gap":                  "gap_fill",
+        "gap_fade":             "gap_fill",
+        # RSI / divergence → trend pullback
+        "rsi":                  "trend_pullback",
+        "rsi_divergence":       "trend_pullback",
+        "divergence":           "trend_pullback",
     }
     normalised = key.strip().lower()
     return aliases.get(normalised, normalised)
@@ -602,6 +613,126 @@ async def run_scan(req: ScanRequest):
         raise
     except Exception as exc:
         logger.exception("Scan failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Route: GET /api/scan/nifty  — scan all 10 strategies on NIFTY in one call
+# ─────────────────────────────────────────────────────────────────────────────
+
+# The 10 best intraday strategies for NIFTY 50 options
+NIFTY_STRATEGY_KEYS = [
+    "orb15",
+    "orb30",
+    "cpr_vwap_confluence",
+    "vwap_mean_reversion",
+    "gap_continuation",
+    "gap_fill",
+    "inside_bar_bo",
+    "open_drive",
+    "trend_pullback",
+    "afternoon_trend",
+]
+
+# Time windows when each strategy is relevant (IST hour range, inclusive)
+_STRATEGY_WINDOWS: dict[str, tuple[int, int]] = {
+    "orb15":               (9, 11),
+    "orb30":               (9, 11),
+    "open_drive":          (9, 10),
+    "gap_continuation":    (9, 10),
+    "gap_fill":            (9, 11),
+    "cpr_vwap_confluence": (9, 15),
+    "vwap_mean_reversion": (10, 15),
+    "inside_bar_bo":       (9, 15),
+    "trend_pullback":      (10, 14),
+    "afternoon_trend":     (13, 15),
+}
+
+
+@app.get("/api/scan/nifty")
+async def scan_nifty_all_strategies():
+    """
+    Scan NIFTY 50 index with all 10 intraday strategies and return
+    the best signals from each strategy that fired in the last 2 days.
+    """
+    try:
+        now_ist  = datetime.now(IST)
+        ist_hour = now_ist.hour
+        end_d    = date.today()
+        start_d  = end_d - timedelta(days=2)
+
+        # Load NIFTY data once
+        df = loader.get_5m_ohlcv("^NSEI", start_d, end_d)
+        if df.empty or len(df) < 20:
+            return {"signals": [], "strategies_scanned": 0, "timestamp": now_ist.isoformat()}
+
+        all_signals: list[dict] = []
+
+        for key in NIFTY_STRATEGY_KEYS:
+            # Skip strategies outside their time window
+            window = _STRATEGY_WINDOWS.get(key, (9, 15))
+            if not (window[0] <= ist_hour <= window[1]):
+                continue
+
+            strategy = STRATEGY_REGISTRY.get(key)
+            if strategy is None:
+                continue
+
+            try:
+                result     = strategy.generate_signals(df)
+                entry_bars = result.entries[result.entries].index
+                if entry_bars.empty:
+                    continue
+
+                last_ts  = entry_bars[-1]
+                idx_pos  = df.index.get_loc(last_ts)
+                row      = df.iloc[idx_pos]
+                sl_val   = result.sl.iloc[idx_pos]
+                tgt_val  = result.target.iloc[idx_pos]
+
+                confidence = getattr(result, "confidence", None)
+                if confidence is not None and hasattr(confidence, "iloc"):
+                    conf_val = float(confidence.iloc[idx_pos])
+                else:
+                    conf_val = 65.0
+
+                close = float(row["close"])
+                sl    = float(sl_val)   if not math.isnan(sl_val)  else close * 0.99
+                tgt   = float(tgt_val)  if not math.isnan(tgt_val) else close * 1.01
+                rr    = round((tgt - close) / (close - sl), 2) if close > sl else 0
+
+                all_signals.append({
+                    "symbol":     "^NSEI",
+                    "strategy":   key,
+                    "side":       getattr(result, "side", "LONG"),
+                    "bar_time":   last_ts.isoformat(),
+                    "close":      round(close, 2),
+                    "stop_loss":  round(sl, 2),
+                    "target":     round(tgt, 2),
+                    "rr":         rr,
+                    "confidence": round(conf_val, 1),
+                    "score":      round(conf_val, 1),
+                    "_strategy":  key,
+                })
+
+            except Exception as strat_exc:
+                logger.debug("Strategy %s skipped: %s", key, strat_exc)
+                continue
+
+        # Sort by confidence descending
+        all_signals.sort(key=lambda x: x["confidence"], reverse=True)
+
+        return {
+            "signals":           all_signals,
+            "signal_count":      len(all_signals),
+            "strategies_scanned": len([k for k in NIFTY_STRATEGY_KEYS
+                                       if _STRATEGY_WINDOWS.get(k, (9,15))[0] <= ist_hour
+                                       <= _STRATEGY_WINDOWS.get(k, (9,15))[1]]),
+            "timestamp":         now_ist.isoformat(),
+        }
+
+    except Exception as exc:
+        logger.exception("scan/nifty failed")
         raise HTTPException(status_code=500, detail=str(exc))
 
 

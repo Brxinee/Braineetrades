@@ -45,12 +45,14 @@ from alerts import (
     format_news,
     format_oi_analysis,
     format_levels,
+    format_strategies_list,
     fetch_news,
     get_regime,
     get_nifty_spot,
     get_nifty_signals,
     _next_thursday,
     REGIME_EMOJI,
+    STRATEGIES,
 )
 
 logging.basicConfig(
@@ -193,6 +195,12 @@ async def cmd_oi(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+async def cmd_strategies(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        format_strategies_list(), parse_mode=ParseMode.MARKDOWN,
+    )
+
+
 async def cmd_levels(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("📐 Calculating levels…")
     msg = await format_levels()
@@ -261,21 +269,23 @@ def main() -> None:
     _app.add_handler(CommandHandler("start", lambda u, c: u.message.reply_text(
         "🤖 *Brainee Trades — NIFTY Options Bot*\n\n"
         "Commands:\n"
-        "  /entry   — best CE/PE right now (T1, T2, SL, R:R)\n"
-        "  /oi      — option chain: PCR, CE wall, PE wall, max pain\n"
-        "  /levels  — CPR pivot levels + key S/R\n"
-        "  /regime  — current market regime\n"
-        "  /expiry  — this week's expiry\n"
-        "  /news    — market news\n"
-        "  /status  — bot health\n"
-        "  /test    — fire a test alert now\n\n"
-        "Auto-alerts every 15 min during market hours.",
+        "  /entry      — best CE/PE right now (T1, T2, SL, R:R)\n"
+        "  /strategies — 10 strategies with 5Y backtest stats\n"
+        "  /oi         — PCR, CE wall, PE wall, max pain\n"
+        "  /levels     — CPR pivot levels + key S/R\n"
+        "  /regime     — current market regime\n"
+        "  /expiry     — this week's expiry\n"
+        "  /news       — market news\n"
+        "  /status     — bot health\n"
+        "  /test       — fire a test alert now\n\n"
+        "📡 10 strategies scanned every 15 min during market hours.",
         parse_mode=ParseMode.MARKDOWN,
     )))
-    _app.add_handler(CommandHandler("entry",  cmd_entry))
-    _app.add_handler(CommandHandler("regime", cmd_regime))
-    _app.add_handler(CommandHandler("oi",     cmd_oi))
-    _app.add_handler(CommandHandler("levels", cmd_levels))
+    _app.add_handler(CommandHandler("entry",      cmd_entry))
+    _app.add_handler(CommandHandler("regime",     cmd_regime))
+    _app.add_handler(CommandHandler("oi",         cmd_oi))
+    _app.add_handler(CommandHandler("levels",     cmd_levels))
+    _app.add_handler(CommandHandler("strategies", cmd_strategies))
     _app.add_handler(CommandHandler("news",   cmd_news))
     _app.add_handler(CommandHandler("expiry", cmd_expiry))
     _app.add_handler(CommandHandler("status", cmd_status))
