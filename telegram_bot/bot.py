@@ -166,6 +166,15 @@ async def cmd_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
 
+async def cmd_test(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("🧪 Running test — sending morning brief + entry suggestion…")
+    brief = await format_morning_brief()
+    await update.message.reply_text(brief, parse_mode=ParseMode.MARKDOWN)
+    await asyncio.sleep(1)
+    entry = await format_entry_suggestion()
+    await update.message.reply_text(entry, parse_mode=ParseMode.MARKDOWN)
+
+
 async def cmd_regime(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     data = await get_regime()
     if not data:
@@ -234,6 +243,7 @@ def main() -> None:
         parse_mode=ParseMode.MARKDOWN,
     )))
     _app.add_handler(CommandHandler("entry",  cmd_entry))
+    _app.add_handler(CommandHandler("test",   cmd_test))
     _app.add_handler(CommandHandler("regime", cmd_regime))
     _app.add_handler(CommandHandler("news",   cmd_news))
     _app.add_handler(CommandHandler("expiry", cmd_expiry))
