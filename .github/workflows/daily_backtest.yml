@@ -22,7 +22,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pandas==2.2.3 numpy==1.26.4 pytz yfinance fastapi pydantic scipy
+        pip install pandas==2.2.3 numpy==1.26.4 pytz yfinance fastapi pydantic
 
     - name: Run full backtest (all 5 strategies, 60-day window)
       run: python -m backtest.runner --strategy all --days 60

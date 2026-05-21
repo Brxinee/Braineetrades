@@ -29,6 +29,13 @@ from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnec
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+# Pure-Python normal distribution helpers (no scipy dependency)
+def _norm_cdf(x: float) -> float:
+    return math.erfc(-x / math.sqrt(2.0)) / 2.0
+
+def _norm_pdf(x: float) -> float:
+    return math.exp(-0.5 * x * x) / math.sqrt(2.0 * math.pi)
+
 # ── path setup so we can import root-level packages ─────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -670,12 +677,11 @@ async def run_backtest_route(req: BacktestRequest):
 def _black_scholes_call(S: float, K: float, T: float, r: float, sigma: float) -> float:
     """Black-Scholes call price. Returns 0 if inputs are degenerate."""
     try:
-        from scipy.stats import norm
         if T <= 0 or sigma <= 0 or S <= 0 or K <= 0:
             return max(S - K, 0.0)
         d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
         d2 = d1 - sigma * math.sqrt(T)
-        return S * norm.cdf(d1) - K * math.exp(-r * T) * norm.cdf(d2)
+        return S * _norm_cdf(d1) - K * math.exp(-r * T) * _norm_cdf(d2)
     except Exception:
         return max(S - K, 0.0)
 
@@ -683,12 +689,11 @@ def _black_scholes_call(S: float, K: float, T: float, r: float, sigma: float) ->
 def _black_scholes_put(S: float, K: float, T: float, r: float, sigma: float) -> float:
     """Black-Scholes put price."""
     try:
-        from scipy.stats import norm
         if T <= 0 or sigma <= 0 or S <= 0 or K <= 0:
             return max(K - S, 0.0)
         d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
         d2 = d1 - sigma * math.sqrt(T)
-        return K * math.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+        return K * math.exp(-r * T) * _norm_cdf(-d2) - S * _norm_cdf(-d1)
     except Exception:
         return max(K - S, 0.0)
 
@@ -696,25 +701,24 @@ def _black_scholes_put(S: float, K: float, T: float, r: float, sigma: float) -> 
 def _bs_greeks(S: float, K: float, T: float, r: float, sigma: float, is_call: bool) -> dict:
     """Compute delta, gamma, theta (per day), vega for an option."""
     try:
-        from scipy.stats import norm
         if T <= 0 or sigma <= 0:
             return {"delta": 0.0, "gamma": 0.0, "theta": 0.0, "vega": 0.0}
         d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
         d2 = d1 - sigma * math.sqrt(T)
-        pdf_d1 = norm.pdf(d1)
+        pdf_d1 = _norm_pdf(d1)
         gamma  = pdf_d1 / (S * sigma * math.sqrt(T))
         vega   = S * pdf_d1 * math.sqrt(T) / 100          # per 1% change in vol
         if is_call:
-            delta = norm.cdf(d1)
+            delta = _norm_cdf(d1)
             theta = (
                 -(S * pdf_d1 * sigma) / (2 * math.sqrt(T))
-                - r * K * math.exp(-r * T) * norm.cdf(d2)
+                - r * K * math.exp(-r * T) * _norm_cdf(d2)
             ) / 365
         else:
-            delta = norm.cdf(d1) - 1
+            delta = _norm_cdf(d1) - 1
             theta = (
                 -(S * pdf_d1 * sigma) / (2 * math.sqrt(T))
-                + r * K * math.exp(-r * T) * norm.cdf(-d2)
+                + r * K * math.exp(-r * T) * _norm_cdf(-d2)
             ) / 365
         return {
             "delta": round(delta, 4),
