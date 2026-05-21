@@ -4,58 +4,33 @@
     {
       "src": "api/app.py",
       "use": "@vercel/python",
-      "config": { "maxLambdaSize": "60mb", "maxDuration": 60 }
-    },
-    {
-      "src": "frontend/**",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "public/**",
-      "use": "@vercel/static"
+      "config": { "maxLambdaSize": "60mb" }
     }
   ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/app.py"
-    },
-    {
-      "src": "/public/(.*)",
-      "dest": "/public/$1"
-    },
-    {
-      "src": "/",
-      "dest": "/frontend/index.html"
-    },
-    {
-      "src": "/(.*\\.(js|css|ico|png|svg|woff2?))",
-      "dest": "/frontend/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/frontend/$1"
+  "functions": {
+    "api/app.py": {
+      "maxDuration": 60
     }
+  },
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/app.py" },
+    { "src": "/public/(.*)", "dest": "/public/$1" },
+    { "src": "/",           "dest": "/frontend/index.html" },
+    { "src": "/(.*)",       "dest": "/frontend/$1" }
   ],
   "headers": [
     {
-      "source": "/api/(.*)",
+      "source": "/api/:path*",
       "headers": [
         { "key": "Access-Control-Allow-Origin",  "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
       ]
     },
     {
-      "source": "/public/data/(.*)",
+      "source": "/public/data/:file*",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=300" }
-      ]
-    },
-    {
-      "source": "/frontend/(.*\\.(js|css))",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=86400" }
       ]
     }
   ],
