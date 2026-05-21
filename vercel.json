@@ -4,14 +4,9 @@
     {
       "src": "api/app.py",
       "use": "@vercel/python",
-      "config": { "maxLambdaSize": "60mb" }
+      "config": { "maxLambdaSize": "60mb", "maxDuration": 60 }
     }
   ],
-  "functions": {
-    "api/app.py": {
-      "maxDuration": 60
-    }
-  },
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/app.py" },
     { "src": "/public/(.*)", "dest": "/public/$1" },
