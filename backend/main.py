@@ -14,6 +14,7 @@ import asyncio
 import json
 import logging
 import math
+import os
 import sys
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
@@ -248,8 +249,10 @@ async def lifespan(app: FastAPI):
     """Create required directories and log startup info."""
     for sub in ("5m", "1d", "vix"):
         (CACHE_DIR / sub).mkdir(parents=True, exist_ok=True)
-    (ROOT / "data" / "historical").mkdir(parents=True, exist_ok=True)
-    (ROOT / "data" / "option_chain").mkdir(parents=True, exist_ok=True)
+    # Only create data dirs when filesystem is writable (not on Vercel)
+    if not os.environ.get("VERCEL"):
+        (ROOT / "data" / "historical").mkdir(parents=True, exist_ok=True)
+        (ROOT / "data" / "option_chain").mkdir(parents=True, exist_ok=True)
 
     market_state = "OPEN" if is_market_open() else "closed"
     logger.info("=" * 60)
