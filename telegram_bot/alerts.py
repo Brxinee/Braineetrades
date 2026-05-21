@@ -161,24 +161,40 @@ async def _post(path: str, body: dict) -> dict | None:
 
 # ── data fetchers ─────────────────────────────────────────────────────────────
 
+async def _stooq_last(symbol: str) -> float | None:
+    """Last price from Stooq as fallback — works after market close too."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get("https://stooq.com/q/d/l/", params={"s": symbol, "i": "d"})
+            r.raise_for_status()
+            rows = [ln.split(",") for ln in r.text.strip().split("\n") if ln]
+            if len(rows) >= 2:
+                return float(rows[-1][4])  # last row, Close column
+    except Exception:
+        pass
+    return None
+
+
 async def get_nifty_spot() -> float | None:
     data = await _get("/api/quotes", symbols="^NSEI")
-    if not data:
-        return None
-    quotes = data.get("quotes", data) if isinstance(data, dict) else data
-    if isinstance(quotes, list) and quotes:
-        return quotes[0].get("ltp")
-    return None
+    if data:
+        quotes = data.get("quotes", data) if isinstance(data, dict) else data
+        if isinstance(quotes, list) and quotes:
+            val = quotes[0].get("ltp")
+            if val:
+                return val
+    return await _stooq_last("^nsei")
 
 
 async def get_vix() -> float | None:
     data = await _get("/api/quotes", symbols="^VIX")
-    if not data:
-        return None
-    quotes = data.get("quotes", data) if isinstance(data, dict) else data
-    if isinstance(quotes, list) and quotes:
-        return quotes[0].get("ltp")
-    return None
+    if data:
+        quotes = data.get("quotes", data) if isinstance(data, dict) else data
+        if isinstance(quotes, list) and quotes:
+            val = quotes[0].get("ltp")
+            if val:
+                return val
+    return await _stooq_last("^indiavix")
 
 
 async def get_regime() -> dict | None:
