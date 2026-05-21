@@ -847,39 +847,70 @@ async def get_options(
 async def get_market_internals():
     """
     Market internals / breadth for the Nifty 50 universe.
-    Uses NSE India's official public API for live quotes — no rate limits.
+    Primary: NSE India official API (1 call, no rate limits).
+    Fallback: yf.download() batch fetch.
     """
+    import warnings
+    quotes = []
+
+    # ── Primary: NSE India API ────────────────────────────────────────────────
     try:
         from backend.nse_api import get_nifty50_quotes
-
         quotes = get_nifty50_quotes()
-        if not quotes:
-            raise RuntimeError("NSE API returned no data")
+        logger.info("internals: NSE API returned %d quotes", len(quotes))
+    except Exception as e:
+        logger.warning("NSE API failed (%s), falling back to yfinance", e)
 
-        advances = sum(1 for q in quotes if q.get("change_pct", 0) >= 0)
-        declines  = len(quotes) - advances
-        total = len(quotes) or 1
+    # ── Fallback: yf.download() batch ────────────────────────────────────────
+    if not quotes:
+        try:
+            universe = loader.get_nifty50_universe()
+            symbols  = [s["symbol"] for s in universe]
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                raw = yf.download(symbols, period="5d", interval="1d",
+                                  auto_adjust=True, progress=False, threads=True)
+            if not raw.empty:
+                close_df = raw["Close"] if "Close" in raw.columns else raw.xs("Close", axis=1, level=0)
+                for s in universe:
+                    sym = s["symbol"]
+                    if sym not in close_df.columns:
+                        continue
+                    closes = close_df[sym].dropna()
+                    if len(closes) < 2:
+                        continue
+                    ltp  = float(closes.iloc[-1])
+                    prev = float(closes.iloc[-2])
+                    chg  = round((ltp - prev) / prev * 100, 2) if prev else 0.0
+                    quotes.append({"symbol": sym, "name": s.get("name", sym),
+                                   "sector": s.get("sector", ""), "ltp": round(ltp, 2),
+                                   "change_pct": chg})
+        except Exception as e2:
+            logger.exception("yfinance fallback also failed: %s", e2)
 
-        return {
+    if not quotes:
+        raise HTTPException(status_code=500, detail="Market internals unavailable — all data sources failed")
+
+    advances = sum(1 for q in quotes if q.get("change_pct", 0) >= 0)
+    declines  = len(quotes) - advances
+
+    return {
+        "advances": advances,
+        "declines": declines,
+        "unchanged": 0,
+        "breadth": {
             "advances": advances,
             "declines": declines,
             "unchanged": 0,
-            "breadth": {
-                "advances": advances,
-                "declines": declines,
-                "unchanged": 0,
-                "ad_ratio": round(advances / max(declines, 1), 2),
-                "above_ema20": 0,
-                "above_ema20_pct": 0,
-                "avg_rsi": None,
-            },
-            "stocks": quotes[:20],  # top 20 for display
-            "sectors": {},
-            "timestamp": datetime.now(IST).isoformat(),
-        }
-    except Exception as exc:
-        logger.exception("Market internals failed")
-        raise HTTPException(status_code=500, detail=str(exc))
+            "ad_ratio": round(advances / max(declines, 1), 2),
+            "above_ema20": 0,
+            "above_ema20_pct": 0,
+            "avg_rsi": None,
+        },
+        "stocks": quotes[:20],
+        "sectors": {},
+        "timestamp": datetime.now(IST).isoformat(),
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
