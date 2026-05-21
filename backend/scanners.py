@@ -42,7 +42,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from backend.data_loader import loader  # singleton DataLoader
-from strategies import REGISTRY  # dict[str, type[Strategy]]
+from backend.strategies import STRATEGY_REGISTRY as REGISTRY  # dict[str, type[Strategy]]
 
 IST = pytz.timezone("Asia/Kolkata")
 logger = logging.getLogger(__name__)

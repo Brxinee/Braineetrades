@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from indicators import atr, ema, vwap
+from backend.indicators import atr, ema, vwap
 
 logger = logging.getLogger(__name__)
 

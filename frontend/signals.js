@@ -1,159 +1,199 @@
 /**
- * signals.js — Signal card rendering, filtering, and journal integration
+ * signals.js — Signal card rendering, filtering, sorting, and journal integration
  * Exposed as window.Signals
+ * Depends on: ui.js (window.UI), storage.js (window.Storage)
  */
 (function () {
   'use strict';
 
-  /* ── Formatters ─────────────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     FORMATTERS
+  ═══════════════════════════════════════════════════════════════════════════ */
 
   function fmtInr(v) {
-    if (v == null || isNaN(v)) return '—';
+    if (v == null || v === '' || isNaN(Number(v))) return '—';
     return '₹' + Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  function fmtAgo(signalTime) {
-    if (!signalTime) return '';
-    const now    = Date.now();
-    const ts     = new Date(signalTime).getTime();
-    const diffMs = now - ts;
-    if (isNaN(diffMs) || diffMs < 0) return '';
-    const mins   = Math.floor(diffMs / 60000);
+  function fmtTime(isoStr) {
+    if (!isoStr) return '—';
+    try {
+      return new Date(isoStr).toLocaleString('en-IN', {
+        timeZone:  'Asia/Kolkata',
+        day:       '2-digit',
+        month:     'short',
+        hour:      '2-digit',
+        minute:    '2-digit',
+        hour12:    false,
+      });
+    } catch { return String(isoStr).slice(0, 16); }
+  }
+
+  function fmtAgo(isoStr) {
+    if (!isoStr) return '';
+    const ms   = Date.now() - new Date(isoStr).getTime();
+    if (isNaN(ms) || ms < 0) return '';
+    const mins = Math.floor(ms / 60000);
     if (mins < 1)  return 'just now';
     if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
     return `${hrs}h ${mins % 60}m ago`;
   }
 
-  function fmtTime(isoStr) {
-    if (!isoStr) return '—';
-    try {
-      const d = new Date(isoStr);
-      return d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
-    } catch { return isoStr.slice(11, 16); }
-  }
+  /* ═══════════════════════════════════════════════════════════════════════════
+     DIRECTION CONFIG
+     Left-border colors: CE=#B8FF57, PE=#FF4D4D, SELL_PREMIUM=#FFB347
+  ═══════════════════════════════════════════════════════════════════════════ */
 
-  function fmtBarsAgo(barsAgo) {
-    if (barsAgo == null) return '';
-    if (barsAgo === 0)   return 'current bar';
-    return `${barsAgo} bar${barsAgo !== 1 ? 's' : ''} ago`;
-  }
-
-  /* ── Direction config ───────────────────────────────────────────────────── */
-
-  const DIR_CONFIG = {
-    'BUY CE':       { color: '#B8FF57', textColor: '#000', bg: 'rgba(184,255,87,.12)' },
-    'BUY PE':       { color: '#FF4D4D', textColor: '#fff', bg: 'rgba(255,77,77,.12)'  },
-    'SELL PREMIUM': { color: '#FFB347', textColor: '#000', bg: 'rgba(255,179,71,.12)' },
-    'LONG':         { color: '#B8FF57', textColor: '#000', bg: 'rgba(184,255,87,.12)' },
-    'SHORT':        { color: '#FF4D4D', textColor: '#fff', bg: 'rgba(255,77,77,.12)'  },
+  const DIR_CFG = {
+    'BUY CE':       { border: '#B8FF57', bg: 'rgba(184,255,87,.10)', color: '#B8FF57' },
+    'BUY PE':       { border: '#FF4D4D', bg: 'rgba(255,77,77,.10)',  color: '#FF4D4D' },
+    'SELL PREMIUM': { border: '#FFB347', bg: 'rgba(255,179,71,.10)', color: '#FFB347' },
+    'LONG':         { border: '#B8FF57', bg: 'rgba(184,255,87,.10)', color: '#B8FF57' },
+    'SHORT':        { border: '#FF4D4D', bg: 'rgba(255,77,77,.10)',  color: '#FF4D4D' },
+    'BUY':          { border: '#B8FF57', bg: 'rgba(184,255,87,.10)', color: '#B8FF57' },
+    'SELL':         { border: '#FF4D4D', bg: 'rgba(255,77,77,.10)',  color: '#FF4D4D' },
   };
 
-  function getDirConfig(direction) {
-    return DIR_CONFIG[direction] || { color: '#888', textColor: '#fff', bg: 'rgba(136,136,136,.12)' };
+  function getDirCfg(direction) {
+    const key = (direction || '').toUpperCase().trim();
+    return DIR_CFG[key] || { border: '#4A4A4A', bg: 'rgba(74,74,74,.10)', color: '#4A4A4A' };
   }
 
-  /* ── Confidence bar ─────────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     CONFIDENCE BAR  (0–10 scale)
+  ═══════════════════════════════════════════════════════════════════════════ */
 
-  function confidenceBarHtml(score) {
-    const pct    = Math.min(10, Math.max(0, Number(score) || 0)) * 10;
-    let   color  = '#FF4D4D';
-    if (score >= 7) color = '#B8FF57';
-    else if (score >= 5) color = '#FFB347';
+  function _confColor(score) {
+    const s = Number(score) || 0;
+    if (s >= 7) return '#B8FF57';
+    if (s >= 5) return '#FFB347';
+    return '#FF4D4D';
+  }
+
+  function _confidenceBarHtml(score) {
+    const s   = Math.min(10, Math.max(0, Number(score) || 0));
+    const pct = s * 10;
+    const col = _confColor(s);
     return `
-      <div class="sig-conf-wrap" title="Confidence ${score}/10">
-        <div class="sig-conf-label">Confidence</div>
-        <div class="sig-conf-track">
-          <div class="sig-conf-fill" style="width:${pct}%;background:${color}"></div>
+      <div class="sgl-conf-wrap" title="Confidence ${s}/10">
+        <span class="sgl-conf-lbl">Conf</span>
+        <div class="sgl-conf-track">
+          <div class="sgl-conf-fill" style="width:${pct}%;background:${col}"></div>
         </div>
-        <div class="sig-conf-val" style="color:${color}">${Number(score).toFixed(1)}</div>
+        <span class="sgl-conf-val" style="color:${col}">${s.toFixed(1)}</span>
       </div>`;
   }
 
-  /* ── Option suggestion ──────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     OPTION SUGGESTION
+  ═══════════════════════════════════════════════════════════════════════════ */
 
-  function optionSuggestionHtml(opt) {
+  function _optionHtml(opt) {
     if (!opt) return '';
     const { strike, type, expiry, estimated_premium } = opt;
+    const typeColor = type === 'CE' ? '#B8FF57' : type === 'PE' ? '#FF4D4D' : '#E2E2E2';
     return `
-      <div class="sig-option-row">
-        <span class="sig-option-label">Option</span>
-        <span class="sig-option-val">
-          ${strike || '—'} ${type || ''} ${expiry || ''}
-          ${estimated_premium != null ? '&nbsp;·&nbsp;<span style="font-family:monospace">~' + fmtInr(estimated_premium) + '</span>' : ''}
+      <div class="sgl-option-row">
+        <span class="sgl-dim">Option&nbsp;</span>
+        <span style="font-family:monospace;color:#E2E2E2">
+          ${strike || '—'}&nbsp;
+          <span style="color:${typeColor};font-weight:700">${type || ''}</span>
+          &nbsp;${expiry || ''}
+          ${estimated_premium != null
+            ? `&nbsp;·&nbsp;<span style="color:#4A4A4A">est.&nbsp;</span>${fmtInr(estimated_premium)}`
+            : ''}
         </span>
       </div>`;
   }
 
-  /* ── Reasoning list ─────────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     REASONING LIST
+  ═══════════════════════════════════════════════════════════════════════════ */
 
-  function reasoningHtml(reasons) {
-    if (!reasons || !reasons.length) return '';
-    const items = (Array.isArray(reasons) ? reasons : [reasons])
-      .map(r => `<li class="sig-reason-item">${r}</li>`)
-      .join('');
-    return `<ul class="sig-reason-list">${items}</ul>`;
+  function _reasoningHtml(reasons) {
+    if (!reasons) return '';
+    const list = Array.isArray(reasons) ? reasons : (reasons ? [reasons] : []);
+    if (!list.length) return '';
+    return `
+      <ul class="sgl-reasons">
+        ${list.map(r => `<li>${r}</li>`).join('')}
+      </ul>`;
   }
 
-  /* ── Regime warning ─────────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     REGIME WARNING
+  ═══════════════════════════════════════════════════════════════════════════ */
 
   function renderRegimeWarning(regime, strategy) {
     if (!regime || !strategy) return '';
-    const compatible = Array.isArray(regime.compatible_strategies) ? regime.compatible_strategies : [];
-    if (compatible.includes(strategy)) return '';
+    const compat = Array.isArray(regime.compatible_strategies)
+      ? regime.compatible_strategies : [];
+    if (compat.includes(strategy)) return '';
     return `
-      <div class="sig-regime-warn">
-        <span class="sig-regime-icon">&#9888;</span>
-        Strategy <strong>${strategy}</strong> not recommended in
-        <strong>${regime.name || regime.type || 'current'}</strong> regime.
-        Compatible: ${compatible.length ? compatible.join(', ') : 'none'}.
+      <div class="sgl-regime-warn">
+        <span>&#9888;</span>
+        <span>
+          <strong>${strategy}</strong> is not recommended in
+          <strong>${regime.name || regime.type || 'current'}</strong> regime.
+          Compatible: ${compat.length ? compat.join(', ') : 'none listed'}.
+        </span>
       </div>`;
   }
 
-  /* ── Single card HTML ───────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     SINGLE CARD HTML
+  ═══════════════════════════════════════════════════════════════════════════ */
 
   function renderCard(signal) {
     const s         = signal;
     const dir       = s.direction || s.signal_type || 'LONG';
-    const cfg       = getDirConfig(dir);
+    const cfg       = getDirCfg(dir);
     const sym       = (s.symbol || '').replace('.NS', '');
-    const strategy  = s.strategy || s.strategy_name || '';
-    const conf      = s.confidence != null ? s.confidence : (s.score != null ? s.score : '—');
+    const strategy  = s.strategy_name || s.strategy || s.indicator || '';
+    const conf      = s.confidence != null ? s.confidence : s.score;
+    const entry     = fmtInr(s.entry   != null ? s.entry   : s.entry_price);
+    const slVal     = fmtInr(s.sl      != null ? s.sl      : s.stop_loss);
+    const t1        = fmtInr(s.t1      != null ? s.t1      : s.target1 != null ? s.target1 : s.target);
+    const t2        = fmtInr(s.t2      != null ? s.t2      : s.target2);
     const rr        = s.rr != null ? Number(s.rr).toFixed(2) : '—';
-    const ago       = fmtAgo(s.signal_time || s.ts);
-    const barsAgo   = fmtBarsAgo(s.bars_ago);
-    const sigId     = s.id || (sym + '_' + (s.signal_time || Date.now()));
-
-    const entry  = fmtInr(s.entry  || s.entry_price);
-    const sl     = fmtInr(s.sl     || s.stop_loss);
-    const t1     = fmtInr(s.t1     || s.target1);
-    const t2     = fmtInr(s.t2     || s.target2);
-
-    const reasonArr  = s.reasoning || s.reasons || s.indicators || [];
-    const optSuggest = s.option_suggestion || s.option || null;
+    const rrColor   = s.rr >= 2 ? '#B8FF57' : s.rr >= 1 ? '#FFB347' : '#4A4A4A';
+    const ago       = fmtAgo(s.signal_time || s.ts || s.time);
+    const barsAgo   = s.bars_ago != null
+      ? `${s.bars_ago} bar${s.bars_ago !== 1 ? 's' : ''} ago` : '';
+    const reasoning = s.reasoning || s.reasons || s.indicators || [];
+    const optSug    = s.option_suggestion || s.option || null;
+    const sigJson   = JSON.stringify(s).replace(/"/g, '&quot;');
 
     return `
-<div class="sig-card" style="border-left-color:${cfg.color}" data-sigid="${sigId}">
+<div class="sig-card" style="border-left-color:${cfg.border}" data-sigid="${s.id || sym}">
+  <!-- Direction badge + symbol -->
   <div class="sig-top">
-    <div>
-      <div class="sig-sym">${sym}</div>
+    <div style="flex:1;min-width:0">
+      <span class="sgl-dir-badge" style="background:${cfg.bg};color:${cfg.color};border-color:${cfg.color}66">
+        ${dir}
+      </span>
+      <div class="sig-sym" style="margin-top:5px">${sym}</div>
       <div class="sig-meta">${strategy}</div>
     </div>
-    <div class="sig-ltp">
-      <div class="sig-dir-badge" style="background:${cfg.bg};color:${cfg.color};border-color:${cfg.color}">${dir}</div>
+    <div class="sig-ltp" style="text-align:right;flex-shrink:0">
+      <div class="sig-price">${fmtInr(s.ltp)}</div>
+      <div class="sgl-dim" style="font-size:11px">LTP</div>
     </div>
   </div>
 
-  ${conf !== '—' ? confidenceBarHtml(conf) : ''}
+  <!-- Confidence bar -->
+  ${conf != null ? _confidenceBarHtml(conf) : ''}
 
-  <div class="sig-prices">
+  <!-- Entry / SL / T1 / T2 price boxes -->
+  <div class="sig-prices" style="grid-template-columns:repeat(4,1fr)">
     <div class="sig-p">
       <div class="lbl">Entry</div>
       <div class="val" style="font-family:monospace">${entry}</div>
     </div>
     <div class="sig-p">
       <div class="lbl">Stop Loss</div>
-      <div class="val neg" style="font-family:monospace">${sl}</div>
+      <div class="val neg" style="font-family:monospace">${slVal}</div>
     </div>
     <div class="sig-p">
       <div class="lbl">Target 1</div>
@@ -165,42 +205,65 @@
     </div>
   </div>
 
-  ${rr !== '—' ? `<div class="sig-rr">R:R &nbsp;<strong>${rr}</strong></div>` : ''}
+  <!-- R:R -->
+  ${rr !== '—' ? `
+  <div style="margin-top:8px;font-size:12px;color:#4A4A4A">
+    R&nbsp;:&nbsp;R &nbsp;<span style="font-family:monospace;font-size:14px;
+    font-weight:700;color:${rrColor}">${rr}</span>
+  </div>` : ''}
 
-  ${optionSuggestionHtml(optSuggest)}
+  <!-- Option suggestion -->
+  ${_optionHtml(optSug)}
 
-  ${reasoningHtml(reasonArr)}
+  <!-- Reasoning bullets -->
+  ${_reasoningHtml(reasoning)}
 
+  <!-- Footer: strategy badge · time · bars ago · Log button -->
   <div class="sig-foot">
-    <span class="sig-badge">${s.indicator || strategy || 'SIGNAL'}</span>
-    <span class="sig-time">${fmtTime(s.signal_time || s.ts)} IST</span>
-    ${ago   ? `<span class="sig-time">${ago}</span>` : ''}
+    <span class="sig-badge">${strategy || 'SIGNAL'}</span>
+    <span class="sig-time">${fmtTime(s.signal_time || s.ts || s.time)}</span>
+    ${ago     ? `<span class="sig-time">${ago}</span>` : ''}
     ${barsAgo ? `<span class="sig-time">(${barsAgo})</span>` : ''}
-    <button class="log-btn" onclick="window.Signals.logSignalToJournal(${JSON.stringify(s).replace(/"/g, '&quot;')})">
+    <button class="log-btn" data-sig="${sigJson}"
+      onclick="window.Signals.logSignalToJournal(JSON.parse(this.dataset.sig.replace(/&quot;/g,'&quot;')))">
       + Log Trade
     </button>
   </div>
 </div>`;
   }
 
-  /* ── Render many cards ──────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     RENDER CARDS ARRAY INTO CONTAINER
+  ═══════════════════════════════════════════════════════════════════════════ */
 
   function renderCards(signals, containerId) {
     const el = document.getElementById(containerId);
     if (!el) { console.warn('[Signals] container not found:', containerId); return; }
 
-    if (!signals || !signals.length) {
+    if (!signals || signals.length === 0) {
       renderEmpty(containerId);
       return;
     }
 
+    _ensureStyles();
     el.innerHTML = '<div class="sig-grid">' + signals.map(renderCard).join('') + '</div>';
 
-    // Inject minimal inline styles if not already present
-    _ensureStyles();
+    // Bind log-trade buttons safely (encoded JSON in data attribute)
+    el.querySelectorAll('.log-btn[data-sig]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        try {
+          const sig = JSON.parse(btn.dataset.sig);
+          logSignalToJournal(sig);
+        } catch (e) {
+          console.error('[Signals] Could not parse signal for journal:', e);
+        }
+      });
+    });
   }
 
-  /* ── Empty state ────────────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     EMPTY STATE
+  ═══════════════════════════════════════════════════════════════════════════ */
 
   function renderEmpty(containerId) {
     const el = document.getElementById(containerId);
@@ -208,248 +271,247 @@
     el.innerHTML = `
       <div class="no-sig">
         <div class="no-sig-h">NO SIGNALS</div>
-        <div style="font-size:12px;margin-top:4px;color:var(--muted)">
-          No signals detected for the current filters and time window.
+        <div style="font-size:13px;color:var(--muted)">
+          No signals detected for the active filters and time window.
         </div>
       </div>`;
   }
 
-  /* ── Filter ─────────────────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     FILTER
+     filters: { direction, strategy, minConfidence, maxBarsOld }
+  ═══════════════════════════════════════════════════════════════════════════ */
 
   function filterSignals(signals, filters) {
     if (!signals || !signals.length) return [];
-    filters = filters || {};
-
+    const f = filters || {};
     return signals.filter(s => {
-      const dir     = s.direction || s.signal_type || '';
-      const strat   = s.strategy  || s.strategy_name || '';
-      const conf    = s.confidence != null ? s.confidence : (s.score != null ? s.score : 0);
-      const barsAgo = s.bars_ago != null ? s.bars_ago : 0;
+      const dir   = (s.direction || s.signal_type || '').toUpperCase();
+      const strat = s.strategy_name || s.strategy || '';
+      const conf  = s.confidence != null ? Number(s.confidence) : (s.score != null ? Number(s.score) : 0);
+      const bars  = s.bars_ago != null ? Number(s.bars_ago) : 0;
 
-      if (filters.direction && dir !== filters.direction) return false;
-      if (filters.strategy  && strat !== filters.strategy)   return false;
-      if (filters.minConfidence != null && conf < filters.minConfidence) return false;
-      if (filters.maxBarsOld    != null && barsAgo > filters.maxBarsOld) return false;
+      if (f.direction    && dir   !== f.direction.toUpperCase()) return false;
+      if (f.strategy     && strat !== f.strategy)                return false;
+      if (f.minConfidence != null && conf < f.minConfidence)     return false;
+      if (f.maxBarsOld   != null && bars > f.maxBarsOld)         return false;
       return true;
     });
   }
 
-  /* ── Sort ───────────────────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     SORT
+  ═══════════════════════════════════════════════════════════════════════════ */
 
   function sortSignals(signals, by) {
     if (!signals || !signals.length) return [];
     const arr = signals.slice();
-    by = by || 'confidence';
+    const mode = by || 'confidence';
 
-    if (by === 'confidence') {
+    if (mode === 'time') {
       arr.sort((a, b) => {
-        const ca = a.confidence != null ? a.confidence : (a.score != null ? a.score : 0);
-        const cb = b.confidence != null ? b.confidence : (b.score != null ? b.score : 0);
-        return cb - ca;
-      });
-    } else if (by === 'time') {
-      arr.sort((a, b) => {
-        const ta = new Date(a.signal_time || a.ts || 0).getTime();
-        const tb = new Date(b.signal_time || b.ts || 0).getTime();
+        const ta = new Date(a.signal_time || a.ts || a.time || 0).getTime();
+        const tb = new Date(b.signal_time || b.ts || b.time || 0).getTime();
         return tb - ta;
+      });
+    } else {
+      // confidence desc
+      arr.sort((a, b) => {
+        const ca = a.confidence != null ? Number(a.confidence) : (a.score != null ? Number(a.score) : 0);
+        const cb = b.confidence != null ? Number(b.confidence) : (b.score != null ? Number(b.score) : 0);
+        return cb - ca;
       });
     }
     return arr;
   }
 
-  /* ── Log to Journal ─────────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     LOG SIGNAL TO JOURNAL
+  ═══════════════════════════════════════════════════════════════════════════ */
 
   function logSignalToJournal(signal) {
-    const sig = typeof signal === 'string' ? JSON.parse(signal) : signal;
+    const s = typeof signal === 'string' ? JSON.parse(signal) : signal;
 
     const prefill = {
-      date:      (sig.signal_time || new Date().toISOString()).slice(0, 10),
-      symbol:    (sig.symbol || '').replace('.NS', ''),
-      direction: sig.direction || sig.signal_type || 'LONG',
-      strategy:  sig.strategy  || sig.strategy_name || '',
-      entry:     sig.entry     || sig.entry_price   || '',
-      sl:        sig.sl        || sig.stop_loss      || '',
-      t1:        sig.t1        || sig.target1        || '',
-      t2:        sig.t2        || sig.target2        || '',
-      rr:        sig.rr        || '',
-      notes:     [
-        sig.strategy || '',
-        sig.direction || '',
-        sig.rr ? `R:R ${sig.rr}` : '',
-        ...(Array.isArray(sig.reasoning) ? sig.reasoning : [sig.indicator || '']),
+      date:      (s.signal_time || s.ts || s.time || new Date().toISOString()).slice(0, 10),
+      symbol:    (s.symbol || '').replace('.NS', '').toUpperCase(),
+      direction: s.direction  || s.signal_type  || 'LONG',
+      strategy:  s.strategy_name || s.strategy  || s.indicator || '',
+      entry:     s.entry     != null ? String(s.entry)     : s.entry_price != null ? String(s.entry_price) : '',
+      sl:        s.sl        != null ? String(s.sl)        : s.stop_loss   != null ? String(s.stop_loss)   : '',
+      target:    s.t1        != null ? String(s.t1)        : s.target1     != null ? String(s.target1)
+               : s.target    != null ? String(s.target)    : '',
+      qty:       s.qty       != null ? String(s.qty) : '',
+      notes: [
+        s.direction   || '',
+        s.rr          ? `R:R ${Number(s.rr).toFixed(2)}` : '',
+        s.strategy_name || s.strategy || '',
+        Array.isArray(s.reasoning) && s.reasoning.length ? s.reasoning[0] : (s.indicator || ''),
       ].filter(Boolean).join(' · '),
+      _source: 'signals',
     };
 
-    // Try Journal module first
+    // Use Journal module if available
     if (window.Journal && typeof window.Journal.openAddForm === 'function') {
       window.Journal.openAddForm(prefill);
       return;
     }
 
-    // Fallback: navigate to journal tab and fill form fields
-    const journalTab = document.querySelector('[data-tab="journal"]');
-    if (journalTab) journalTab.click();
+    // Fallback: store in localStorage and navigate
+    try {
+      localStorage.setItem('brainee_pending_trade', JSON.stringify(prefill));
+    } catch (e) {
+      console.warn('[Signals] localStorage write failed:', e);
+    }
+
+    const tab = document.querySelector('[data-tab="journal"]');
+    if (tab) tab.click();
 
     setTimeout(() => {
-      _prefillForm(prefill);
-      // Scroll to form
-      const formWrap = document.getElementById('jnl-form-wrap') || document.getElementById('jnl-add-form');
-      if (formWrap) formWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 120);
+      _applyPrefillToForm(prefill);
+      const form = document.getElementById('jnl-form-wrap') || document.getElementById('jnl-add-form');
+      if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
 
-    // Toast
+    const sym = prefill.symbol || 'Signal';
     if (window.UI && typeof window.UI.toast === 'function') {
-      window.UI.toast((prefill.symbol || 'Signal') + ' pre-filled in journal', 'success');
+      window.UI.toast(`${sym} pre-filled in Journal — add exit when done`, 'success');
     } else {
-      _showToastFallback((prefill.symbol || 'Signal') + ' pre-filled — fill exit details');
+      _legacyToast(`${sym} pre-filled — fill exit details in Journal`);
     }
   }
 
-  function _prefillForm(data) {
-    const map = {
-      'jnl-date':      data.date,
-      'jnl-symbol':    data.symbol,
-      'jnl-direction': data.direction,
-      'jnl-strategy':  data.strategy,
-      'jnl-entry':     data.entry,
-      'jnl-sl':        data.sl,
-      'jnl-notes':     data.notes,
-    };
-    Object.entries(map).forEach(([id, val]) => {
+  function _applyPrefillToForm(data) {
+    const set = (id, val) => {
       const el = document.getElementById(id);
-      if (el && val != null) el.value = val;
-    });
+      if (el && val != null && val !== '') el.value = val;
+    };
+    set('jnl-date',     data.date);
+    set('jnl-symbol',   data.symbol);
+    set('jnl-strategy', data.strategy);
+    set('jnl-entry',    data.entry);
+    set('jnl-exit',     '');
+    set('jnl-sl',       data.sl);
+    set('jnl-target',   data.target);
+    set('jnl-qty',      data.qty);
+    set('jnl-notes',    data.notes);
   }
 
-  function _showToastFallback(msg) {
+  function _legacyToast(msg) {
     const t = document.getElementById('toast');
     if (!t) return;
     t.textContent = msg;
     t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 3000);
+    setTimeout(() => t.classList.remove('show'), 3500);
   }
 
-  /* ── Inline styles for new classes ─────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     INLINE STYLES FOR NEW CSS CLASSES
+  ═══════════════════════════════════════════════════════════════════════════ */
 
   function _ensureStyles() {
-    if (document.getElementById('signals-styles')) return;
+    if (document.getElementById('sgl-styles')) return;
     const style = document.createElement('style');
-    style.id = 'signals-styles';
+    style.id = 'sgl-styles';
     style.textContent = `
-      .sig-dir-badge {
+      /* Direction badge */
+      .sgl-dir-badge {
         display: inline-block;
-        font-family: var(--fh, sans-serif);
-        font-size: 12px;
+        font-family: var(--fh, 'Barlow Condensed', sans-serif);
+        font-size: 11px;
         font-weight: 900;
-        letter-spacing: .08em;
-        padding: 4px 11px;
-        border-radius: 4px;
-        border: 1px solid;
+        letter-spacing: .10em;
         text-transform: uppercase;
+        padding: 3px 10px;
+        border-radius: 3px;
+        border: 1px solid;
       }
-      .sig-conf-wrap {
+      /* Confidence bar */
+      .sgl-conf-wrap {
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin: 10px 0 6px;
+        gap: 6px;
+        margin: 8px 0 4px;
       }
-      .sig-conf-label {
+      .sgl-conf-lbl {
         font-size: 10px;
         color: var(--muted, #4A4A4A);
         text-transform: uppercase;
         letter-spacing: .08em;
-        white-space: nowrap;
-        width: 72px;
+        width: 32px;
         flex-shrink: 0;
       }
-      .sig-conf-track {
+      .sgl-conf-track {
         flex: 1;
         height: 4px;
         background: var(--bg3, #181818);
         border-radius: 2px;
         overflow: hidden;
       }
-      .sig-conf-fill {
+      .sgl-conf-fill {
         height: 100%;
         border-radius: 2px;
         transition: width .4s ease;
       }
-      .sig-conf-val {
-        font-family: var(--fh, sans-serif);
-        font-size: 14px;
+      .sgl-conf-val {
+        font-family: var(--fh, 'Barlow Condensed', sans-serif);
+        font-size: 13px;
         font-weight: 900;
-        width: 28px;
+        width: 26px;
         text-align: right;
         flex-shrink: 0;
       }
-      .sig-rr {
-        font-size: 12px;
-        color: var(--muted, #4A4A4A);
-        margin-top: 8px;
-      }
-      .sig-rr strong {
-        color: var(--text, #E2E2E2);
-        font-family: monospace;
-      }
-      .sig-option-row {
+      /* Option row */
+      .sgl-option-row {
         display: flex;
         align-items: baseline;
-        gap: 8px;
-        margin-top: 8px;
+        gap: 6px;
         font-size: 12px;
+        margin-top: 8px;
       }
-      .sig-option-label {
-        color: var(--muted, #4A4A4A);
-        text-transform: uppercase;
-        letter-spacing: .08em;
-        font-size: 10px;
-        white-space: nowrap;
-      }
-      .sig-option-val {
-        color: var(--text, #E2E2E2);
-        font-family: monospace;
-      }
-      .sig-reason-list {
+      /* Reasoning */
+      .sgl-reasons {
         list-style: none;
-        margin: 10px 0 0;
+        margin: 9px 0 0;
         padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 2px;
       }
-      .sig-reason-item {
+      .sgl-reasons li {
         font-size: 11px;
         color: var(--muted, #4A4A4A);
         padding-left: 12px;
         position: relative;
+        line-height: 1.5;
       }
-      .sig-reason-item::before {
+      .sgl-reasons li::before {
         content: '·';
         position: absolute;
         left: 2px;
-        color: var(--muted, #4A4A4A);
       }
-      .sig-regime-warn {
-        background: rgba(255,179,71,.08);
-        border: 1px solid rgba(255,179,71,.3);
-        border-radius: 5px;
+      /* Regime warning */
+      .sgl-regime-warn {
+        background: rgba(255,179,71,.07);
+        border: 1px solid rgba(255,179,71,.28);
+        border-radius: 4px;
         padding: 8px 12px;
         font-size: 12px;
         color: #FFB347;
         margin-top: 10px;
         display: flex;
-        align-items: flex-start;
         gap: 8px;
+        align-items: flex-start;
+        line-height: 1.5;
       }
-      .sig-regime-icon {
-        flex-shrink: 0;
-        font-size: 14px;
-      }
+      .sgl-dim { color: var(--muted, #4A4A4A); }
     `;
     document.head.appendChild(style);
   }
 
-  /* ── Public API ─────────────────────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     PUBLIC API
+  ═══════════════════════════════════════════════════════════════════════════ */
 
   window.Signals = {
     renderCards,
