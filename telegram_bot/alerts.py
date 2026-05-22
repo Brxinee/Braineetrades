@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import logging
+import asyncio
 from datetime import datetime, date, timedelta
 
 import httpx
@@ -167,21 +168,38 @@ async def _post(path: str, body: dict) -> dict | None:
 
 # ── data fetchers ─────────────────────────────────────────────────────────────
 
+def _yf_price(symbol: str) -> float | None:
+    """Direct yfinance price fetch — sync, run in executor."""
+    try:
+        import yfinance as yf
+        t = yf.Ticker(symbol)
+        h = t.history(period="1d", interval="1m")
+        if not h.empty:
+            return float(h["Close"].iloc[-1])
+        h = t.history(period="5d")
+        if not h.empty:
+            return float(h["Close"].iloc[-1])
+    except Exception:
+        pass
+    return None
+
+
 async def _stooq_last(symbol: str) -> float | None:
-    """Last price from Stooq as fallback — works after market close too."""
+    """Last close price from Stooq."""
     try:
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.get("https://stooq.com/q/d/l/", params={"s": symbol, "i": "d"})
             r.raise_for_status()
             rows = [ln.split(",") for ln in r.text.strip().split("\n") if ln]
             if len(rows) >= 2:
-                return float(rows[-1][4])  # last row, Close column
+                return float(rows[-1][4])
     except Exception:
         pass
     return None
 
 
 async def get_nifty_spot() -> float | None:
+    # 1. Vercel API
     data = await _get("/api/quotes", symbols="^NSEI")
     if data:
         quotes = data.get("quotes", data) if isinstance(data, dict) else data
@@ -189,10 +207,16 @@ async def get_nifty_spot() -> float | None:
             val = quotes[0].get("ltp")
             if val:
                 return val
-    return await _stooq_last("^nsei")
+    # 2. Stooq
+    val = await _stooq_last("^nsei")
+    if val:
+        return val
+    # 3. Direct yfinance
+    return await asyncio.get_event_loop().run_in_executor(None, _yf_price, "^NSEI")
 
 
 async def get_vix() -> float | None:
+    # 1. Vercel API
     data = await _get("/api/quotes", symbols="^VIX")
     if data:
         quotes = data.get("quotes", data) if isinstance(data, dict) else data
@@ -200,7 +224,12 @@ async def get_vix() -> float | None:
             val = quotes[0].get("ltp")
             if val:
                 return val
-    return await _stooq_last("^indiavix")
+    # 2. Stooq
+    val = await _stooq_last("^indiavix")
+    if val:
+        return val
+    # 3. Direct yfinance
+    return await asyncio.get_event_loop().run_in_executor(None, _yf_price, "^INDIAVIX.NS")
 
 
 async def get_regime() -> dict | None:
@@ -241,29 +270,82 @@ async def get_prev_ohlc() -> dict | None:
     return None
 
 
+def _get_ema_atr_regime() -> dict:
+    """EMA 9/20 crossover + ATR regime from yfinance 5-min data (Gemini idea)."""
+    try:
+        import yfinance as yf
+        import numpy as np
+        df = yf.download("^NSEI", period="3d", interval="5m", progress=False)
+        if df.empty or len(df) < 20:
+            return {}
+        if hasattr(df.columns, "get_level_values"):
+            df.columns = df.columns.get_level_values(0)
+        close = df["Close"].squeeze()
+        high  = df["High"].squeeze()
+        low   = df["Low"].squeeze()
+        ema9  = float(close.ewm(span=9,  adjust=False).mean().iloc[-1])
+        ema20 = float(close.ewm(span=20, adjust=False).mean().iloc[-1])
+        tr    = (high - low).abs()
+        atr   = float(tr.rolling(14).mean().iloc[-1])
+        spot  = float(close.iloc[-1])
+        # Typical Price VWAP (today only)
+        today = df[df.index.date == df.index[-1].date()]
+        tp    = (today["High"] + today["Low"] + today["Close"]).squeeze() / 3
+        vol   = today["Volume"].squeeze()
+        vwap  = float((tp * vol).cumsum().iloc[-1] / vol.cumsum().iloc[-1]) if vol.sum() > 0 else spot
+        if spot > vwap and ema9 > ema20:
+            trend = "TRENDING BULLISH"
+        elif spot < vwap and ema9 < ema20:
+            trend = "TRENDING BEARISH"
+        elif abs(ema9 - ema20) < spot * 0.0005:
+            trend = "RANGEBOUND"
+        else:
+            trend = "VOLATILE / NEUTRAL"
+        return {
+            "trend":  trend,
+            "ema9":   round(ema9, 1),
+            "ema20":  round(ema20, 1),
+            "vwap":   round(vwap, 1),
+            "atr":    round(atr, 1),
+            "spot":   round(spot, 1),
+        }
+    except Exception:
+        return {}
+
+
 async def get_option_analysis(expiry: str, spot: float) -> dict:
-    """PCR, CE/PE OI walls, max pain from option chain."""
+    """PCR, OI walls, max pain, IV, change in OI from option chain."""
     chain = await get_option_chain(expiry)
     if not chain or "chain" not in chain:
         return {}
 
     total_ce_oi = total_pe_oi = 0
+    total_ce_chg = total_pe_chg = 0
     max_ce_oi = max_pe_oi = 0
     ce_wall = pe_wall = None
     pain_map: dict[int, tuple[int, int]] = {}
+    atm_iv_ce = atm_iv_pe = None
+    atm_strike = round(round(spot / 50) * 50) if spot else 0
 
     for row in chain["chain"]:
-        strike = row.get("strike", 0)
-        ce_oi  = row.get("ce_oi", 0) or 0
-        pe_oi  = row.get("pe_oi", 0) or 0
-        total_ce_oi += ce_oi
-        total_pe_oi += pe_oi
+        strike     = row.get("strike", 0)
+        ce_oi      = row.get("ce_oi", 0) or 0
+        pe_oi      = row.get("pe_oi", 0) or 0
+        ce_chg     = row.get("ce_change_oi", row.get("ce_chg_oi", 0)) or 0
+        pe_chg     = row.get("pe_change_oi", row.get("pe_chg_oi", 0)) or 0
+        total_ce_oi  += ce_oi
+        total_pe_oi  += pe_oi
+        total_ce_chg += ce_chg
+        total_pe_chg += pe_chg
         if ce_oi > max_ce_oi:
             max_ce_oi, ce_wall = ce_oi, strike
         if pe_oi > max_pe_oi:
             max_pe_oi, pe_wall = pe_oi, strike
         if strike:
             pain_map[strike] = (ce_oi, pe_oi)
+        if strike == atm_strike:
+            atm_iv_ce = row.get("ce_iv") or row.get("ce_impliedvolatility")
+            atm_iv_pe = row.get("pe_iv") or row.get("pe_impliedvolatility")
 
     max_pain = None
     if pain_map:
@@ -277,7 +359,20 @@ async def get_option_analysis(expiry: str, spot: float) -> dict:
                 min_loss, max_pain = loss, k
 
     pcr = round(total_pe_oi / total_ce_oi, 2) if total_ce_oi else 0
-    return {"pcr": pcr, "ce_wall": ce_wall, "pe_wall": pe_wall, "max_pain": max_pain}
+    oi_trend = (
+        "🟢 Fresh buying (PE OI building)" if total_pe_chg > total_ce_chg > 0 else
+        "🔴 Fresh selling (CE OI building)" if total_ce_chg > total_pe_chg > 0 else
+        "⬛ Mixed / unwinding"
+    )
+    return {
+        "pcr":       pcr,
+        "ce_wall":   ce_wall,
+        "pe_wall":   pe_wall,
+        "max_pain":  max_pain,
+        "oi_trend":  oi_trend,
+        "atm_iv_ce": round(atm_iv_ce, 1) if atm_iv_ce else None,
+        "atm_iv_pe": round(atm_iv_pe, 1) if atm_iv_pe else None,
+    }
 
 
 # ── option strike suggestion ──────────────────────────────────────────────────
@@ -340,6 +435,7 @@ async def format_morning_brief() -> str:
     expiry = _next_thursday()
     prev   = await get_prev_ohlc()
     oi     = await get_option_analysis(expiry, spot or 0) if spot else {}
+    tech   = await asyncio.get_event_loop().run_in_executor(None, _get_ema_atr_regime)
 
     r_name = regime.get("regime",     "UNKNOWN") if regime else "UNKNOWN"
     conf   = regime.get("confidence",  0)         if regime else 0
@@ -396,17 +492,31 @@ async def format_morning_brief() -> str:
             f"  → {pos}" if pos else "",
         ]
 
+    # Technical (EMA/ATR from Gemini idea)
+    if tech:
+        lines += [
+            "",
+            "📉 *Technical Indicators*",
+            f"  Trend: *{tech.get('trend', 'N/A')}*",
+            f"  EMA 9/20: {tech.get('ema9')} / {tech.get('ema20')}",
+            f"  VWAP: {tech.get('vwap')}  |  ATR: {tech.get('atr')}",
+        ]
+
     # OI section
     if oi:
         pcr     = oi.get("pcr", 0)
         pcr_txt = "🟢 Bullish" if pcr > 1.2 else "🔴 Bearish" if pcr < 0.8 else "⬛ Neutral"
         lines  += ["", "📊 *Option Chain OI*", f"  PCR: *{pcr}*  ({pcr_txt})"]
+        if oi.get("oi_trend"):
+            lines.append(f"  OI Trend: {oi['oi_trend']}")
         if oi.get("ce_wall"):
             lines.append(f"  🔴 Resistance (CE Wall): *{oi['ce_wall']:,}*")
         if oi.get("pe_wall"):
             lines.append(f"  🟢 Support (PE Wall):    *{oi['pe_wall']:,}*")
         if oi.get("max_pain"):
             lines.append(f"  🎯 Max Pain: *{oi['max_pain']:,}*")
+        if oi.get("atm_iv_ce"):
+            lines.append(f"  ⚡ ATM IV: CE {oi['atm_iv_ce']}%  PE {oi.get('atm_iv_pe', 'N/A')}%")
 
     lines += [
         "",
@@ -587,6 +697,16 @@ async def format_oi_analysis() -> str:
         f"*PCR: {pcr}*",
         f"  {pcr_bias}",
     ]
+    if oi.get("oi_trend"):
+        lines += ["", f"📈 *OI Trend:* {oi['oi_trend']}"]
+    if oi.get("atm_iv_ce"):
+        iv_note = "🔥 IV HIGH — premiums expensive, prefer selling" if oi['atm_iv_ce'] > 20 else "✅ IV normal — ok to buy options"
+        lines += [
+            "",
+            f"⚡ *ATM Implied Volatility*",
+            f"  CE IV: {oi['atm_iv_ce']}%  |  PE IV: {oi.get('atm_iv_pe', 'N/A')}%",
+            f"  {iv_note}",
+        ]
     if oi.get("ce_wall"):
         lines += [
             "",
