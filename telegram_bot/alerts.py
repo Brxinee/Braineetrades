@@ -13,6 +13,11 @@ from datetime import datetime, date, timedelta
 import httpx
 import feedparser
 import pytz
+from gemini_engine import (
+    ai_signal_commentary,
+    ai_morning_commentary,
+    ai_news_synthesis,
+)
 
 log = logging.getLogger(__name__)
 IST = pytz.timezone("Asia/Kolkata")
@@ -527,7 +532,21 @@ async def format_morning_brief() -> str:
         "  • 15:00     → Start booking, trail SL",
         "  • 15:15     → 🚨 EXIT ALL positions",
     ]
-    return "\n".join(l for l in lines if l is not None) + CMD_FOOTER
+    brief = "\n".join(l for l in lines if l is not None)
+
+    # Gemini AI morning outlook
+    ai = ai_morning_commentary(
+        regime    = r_name,
+        spot      = spot or 0,
+        vix       = vix or 0,
+        ema9      = tech.get("ema9", 0),
+        ema20     = tech.get("ema20", 0),
+        vwap      = tech.get("vwap", 0),
+        pcr       = oi.get("pcr", 0),
+        ce_wall   = oi.get("ce_wall") or 0,
+        pe_wall   = oi.get("pe_wall") or 0,
+    )
+    return brief + ai + CMD_FOOTER
 
 
 async def format_signal_alert(sig: dict, direction: str, spot: float) -> str:
@@ -590,7 +609,14 @@ async def format_signal_alert(sig: dict, direction: str, spot: float) -> str:
         "  • Hard exit 3:15 PM — no overnight",
         "🚨 *INTRADAY ONLY*",
     ]
-    return "\n".join(lines) + CMD_FOOTER
+    ai = ai_signal_commentary(
+        strategy  = strat.get("name", strat_key),
+        direction = direction,
+        spot      = spot,
+        regime    = "",
+        vix       = opt["vix"],
+    )
+    return "\n".join(lines) + ai + CMD_FOOTER
 
 
 async def format_entry_suggestion() -> str:
@@ -856,4 +882,6 @@ def format_news(articles: list[dict]) -> str:
     lines = ["📰 *NIFTY Market News*", ""]
     for a in articles:
         lines += [f"• [{a['title']}]({a['link']})", f"  _— {a['source']}_", ""]
-    return "\n".join(lines) + CMD_FOOTER
+    base = "\n".join(lines)
+    ai   = ai_news_synthesis([a["title"] for a in articles])
+    return base + ai + CMD_FOOTER
