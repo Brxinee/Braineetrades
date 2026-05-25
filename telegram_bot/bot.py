@@ -320,7 +320,7 @@ def main() -> None:
     wd = "mon-fri"
 
     s.add_job(job_premarket,     CronTrigger(day_of_week=wd, hour=9, minute=0,  timezone=IST))
-    s.add_job(job_morning_brief, CronTrigger(day_of_week=wd, hour=9, minute=10, timezone=IST))
+    s.add_job(job_morning_brief, CronTrigger(day_of_week=wd, hour=9, minute=20, timezone=IST))
 
     for h in range(9, 16):
         for m in [0, 15, 30, 45]:

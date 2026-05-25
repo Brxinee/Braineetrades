@@ -319,43 +319,72 @@ def _get_ema_atr_regime() -> dict:
 
 
 def _get_global_cues() -> dict:
-    """Overnight global market data — used for NIFTY gap estimation."""
+    """Overnight global market data — Yahoo Finance JSON API primary, Stooq fallback."""
+    result: dict = {}
+
+    # ── Primary: Yahoo Finance direct JSON (one call, fast, no yfinance wrapper) ──
     try:
-        import yfinance as yf
-        sym_map = {
-            "dow":    "^DJI",
-            "sp500":  "^GSPC",
-            "nasdaq": "^IXIC",
-            "usdinr": "USDINR=X",
-            "crude":  "CL=F",
-            "gold":   "GC=F",
+        syms = ["^DJI", "^GSPC", "^IXIC", "USDINR=X", "CL=F", "GC=F"]
+        key_map = {
+            "^DJI": "dow", "^GSPC": "sp500", "^IXIC": "nasdaq",
+            "USDINR=X": "usdinr", "CL=F": "crude", "GC=F": "gold",
         }
-        result: dict = {}
-        for key, sym in sym_map.items():
+        for base in ("https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"):
             try:
-                hist = yf.Ticker(sym).history(period="5d")["Close"].dropna()
-                if len(hist) >= 2:
-                    prev, last = float(hist.iloc[-2]), float(hist.iloc[-1])
-                    result[key] = {
-                        "price": round(last, 2),
-                        "chg":   round((last - prev) / prev * 100, 2),
-                    }
+                r = httpx.get(
+                    f"{base}/v7/finance/quote",
+                    params={"symbols": ",".join(syms)},
+                    headers={"User-Agent": "Mozilla/5.0"},
+                    timeout=12,
+                )
+                for q in r.json().get("quoteResponse", {}).get("result", []):
+                    k = key_map.get(q.get("symbol", ""))
+                    price = q.get("regularMarketPrice")
+                    chg   = q.get("regularMarketChangePercent")
+                    if k and price is not None and chg is not None:
+                        result[k] = {"price": round(float(price), 2), "chg": round(float(chg), 2)}
+                if result:
+                    break
             except Exception:
                 pass
-        us_chgs = [result[k]["chg"] for k in ("sp500", "nasdaq", "dow") if k in result]
-        avg_us   = sum(us_chgs) / len(us_chgs) if us_chgs else 0.0
-        crude_factor = -(result.get("crude", {}).get("chg", 0.0)) * 0.1
-        implied  = round(avg_us * 0.55 + crude_factor, 2)
-        result["implied_gap_pct"] = implied
-        result["gap_bias"] = (
-            "🟢 Gap UP likely"      if implied >  0.3 else
-            "🔴 Gap DOWN likely"    if implied < -0.3 else
-            "⬛ Flat / neutral open"
-        )
-        return result
     except Exception as e:
-        log.warning("Global cues failed: %s", e)
-        return {}
+        log.warning("YF direct quote failed: %s", e)
+
+    # ── Fallback: Stooq CSV for US equity indices ──
+    if not any(k in result for k in ("dow", "sp500", "nasdaq")):
+        def _stooq_chg(sym: str) -> dict | None:
+            try:
+                r = httpx.get(
+                    "https://stooq.com/q/d/l/",
+                    params={"s": sym, "i": "d"},
+                    timeout=8,
+                )
+                rows = [ln.split(",") for ln in r.text.strip().split("\n") if ln]
+                if len(rows) >= 3:
+                    prev = float(rows[-2][4])
+                    last = float(rows[-1][4])
+                    return {"price": round(last, 2), "chg": round((last - prev) / prev * 100, 2)}
+            except Exception:
+                pass
+            return None
+
+        for key, sym in (("dow", "^dji"), ("sp500", "^spx"), ("nasdaq", "^ndq")):
+            d = _stooq_chg(sym)
+            if d:
+                result[key] = d
+
+    # ── Gap bias ──
+    us_chgs = [result[k]["chg"] for k in ("sp500", "nasdaq", "dow") if k in result]
+    avg_us  = sum(us_chgs) / len(us_chgs) if us_chgs else 0.0
+    crude_factor = -(result.get("crude", {}).get("chg", 0.0)) * 0.1
+    implied = round(avg_us * 0.55 + crude_factor, 2)
+    result["implied_gap_pct"] = implied
+    result["gap_bias"] = (
+        "🟢 Gap UP likely"      if implied >  0.3 else
+        "🔴 Gap DOWN likely"    if implied < -0.3 else
+        "⬛ Flat / neutral open"
+    )
+    return result
 
 
 def _get_iv_rank() -> dict:
@@ -614,21 +643,33 @@ async def format_premarket_brief() -> str:
 
 async def format_morning_brief() -> str:
     now    = datetime.now(IST).strftime("%d %b %Y")
-    regime = await get_regime()
-    spot   = await get_nifty_spot()
-    vix    = await get_vix()
     expiry = _next_thursday()
-    prev   = await get_prev_ohlc()
-    oi     = await get_option_analysis(expiry, spot or 0) if spot else {}
-    tech, iv_data, mtf = await asyncio.gather(
-        asyncio.get_event_loop().run_in_executor(None, _get_ema_atr_regime),
-        asyncio.get_event_loop().run_in_executor(None, _get_iv_rank),
-        asyncio.get_event_loop().run_in_executor(None, _get_mtf_confluence),
+
+    # Fetch everything in parallel — much faster than sequential awaits
+    (regime, spot, vix, prev), (tech, iv_data, mtf) = await asyncio.gather(
+        asyncio.gather(get_regime(), get_nifty_spot(), get_vix(), get_prev_ohlc()),
+        asyncio.gather(
+            asyncio.get_event_loop().run_in_executor(None, _get_ema_atr_regime),
+            asyncio.get_event_loop().run_in_executor(None, _get_iv_rank),
+            asyncio.get_event_loop().run_in_executor(None, _get_mtf_confluence),
+        ),
     )
+    oi = await get_option_analysis(expiry, spot or 0) if spot else {}
 
     r_name = regime.get("regime",     "UNKNOWN") if regime else "UNKNOWN"
     conf   = regime.get("confidence",  0)         if regime else 0
     gate   = regime.get("trade_gate", "?")        if regime else "?"
+
+    # ── Local regime fallback when Vercel API is down ──
+    if r_name in ("UNKNOWN", None) and tech:
+        trend = tech.get("trend", "")
+        if "BULLISH" in trend:
+            r_name, conf, gate = "BULL_TREND", 60, "TRADE"
+        elif "BEARISH" in trend:
+            r_name, conf, gate = "BEAR_TREND", 60, "TRADE"
+        else:
+            r_name, conf, gate = "SIDEWAYS", 50, "CAUTION"
+
     emoji  = REGIME_EMOJI.get(r_name, "❓")
 
     gate_text = {
