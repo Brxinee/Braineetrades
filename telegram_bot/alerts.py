@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 import logging
 import asyncio
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time as dtime
 
 import httpx
 import feedparser
@@ -26,7 +26,7 @@ API = "https://braineetrades.vercel.app"
 CMD_FOOTER = (
     "\n━━━━━━━━━━━━━━━━━━━━\n"
     "/entry · /oi · /levels · /strategies\n"
-    "/regime · /news · /expiry · /status"
+    "/global · /regime · /news · /expiry · /status"
 )
 
 REGIME_EMOJI = {
@@ -318,6 +318,120 @@ def _get_ema_atr_regime() -> dict:
         return {}
 
 
+def _get_global_cues() -> dict:
+    """Overnight global market data — used for NIFTY gap estimation."""
+    try:
+        import yfinance as yf
+        sym_map = {
+            "dow":    "^DJI",
+            "sp500":  "^GSPC",
+            "nasdaq": "^IXIC",
+            "usdinr": "USDINR=X",
+            "crude":  "CL=F",
+            "gold":   "GC=F",
+        }
+        result: dict = {}
+        for key, sym in sym_map.items():
+            try:
+                hist = yf.Ticker(sym).history(period="5d")["Close"].dropna()
+                if len(hist) >= 2:
+                    prev, last = float(hist.iloc[-2]), float(hist.iloc[-1])
+                    result[key] = {
+                        "price": round(last, 2),
+                        "chg":   round((last - prev) / prev * 100, 2),
+                    }
+            except Exception:
+                pass
+        us_chgs = [result[k]["chg"] for k in ("sp500", "nasdaq", "dow") if k in result]
+        avg_us   = sum(us_chgs) / len(us_chgs) if us_chgs else 0.0
+        crude_factor = -(result.get("crude", {}).get("chg", 0.0)) * 0.1
+        implied  = round(avg_us * 0.55 + crude_factor, 2)
+        result["implied_gap_pct"] = implied
+        result["gap_bias"] = (
+            "🟢 Gap UP likely"      if implied >  0.3 else
+            "🔴 Gap DOWN likely"    if implied < -0.3 else
+            "⬛ Flat / neutral open"
+        )
+        return result
+    except Exception as e:
+        log.warning("Global cues failed: %s", e)
+        return {}
+
+
+def _get_iv_rank() -> dict:
+    """IV Rank + IV Percentile from 1-year India VIX history."""
+    try:
+        import yfinance as yf
+        closes = yf.Ticker("^INDIAVIX.NS").history(period="1y")["Close"].dropna()
+        if len(closes) < 20:
+            return {}
+        cur    = float(closes.iloc[-1])
+        hi52   = float(closes.max())
+        lo52   = float(closes.min())
+        rank   = round((cur - lo52) / (hi52 - lo52) * 100, 1) if hi52 > lo52 else 50.0
+        pctile = round(float((closes < cur).mean() * 100), 1)
+        advice = (
+            "🔥 IV HIGH (>70%) — sell options or use debit spreads" if rank > 70 else
+            "✅ IV LOW (<30%)  — cheap premiums, good time to buy"  if rank < 30 else
+            "⚡ IV NORMAL      — standard option buying is fine"
+        )
+        return {
+            "current": round(cur, 1),
+            "rank":    rank,
+            "pctile":  pctile,
+            "hi52":    round(hi52, 1),
+            "lo52":    round(lo52, 1),
+            "advice":  advice,
+        }
+    except Exception as e:
+        log.warning("IV Rank failed: %s", e)
+        return {}
+
+
+def _get_mtf_confluence() -> dict:
+    """EMA 9/21 alignment on 5m, 15m, 1h — multi-timeframe bias."""
+    try:
+        import yfinance as yf
+        configs = [("5m", "5m", "5d"), ("15m", "15m", "5d"), ("1h", "1h", "30d")]
+        sigs: dict[str, str] = {}
+        for label, interval, period in configs:
+            try:
+                df = yf.download("^NSEI", period=period, interval=interval, progress=False)
+                if df.empty or len(df) < 22:
+                    sigs[label] = "NEUTRAL"
+                    continue
+                if hasattr(df.columns, "get_level_values"):
+                    df.columns = df.columns.get_level_values(0)
+                c    = df["Close"].squeeze()
+                e9   = float(c.ewm(span=9,  adjust=False).mean().iloc[-1])
+                e21  = float(c.ewm(span=21, adjust=False).mean().iloc[-1])
+                spot = float(c.iloc[-1])
+                if spot > e9 > e21:
+                    sigs[label] = "BULLISH"
+                elif spot < e9 < e21:
+                    sigs[label] = "BEARISH"
+                else:
+                    sigs[label] = "NEUTRAL"
+            except Exception:
+                sigs[label] = "NEUTRAL"
+        bull = sum(1 for v in sigs.values() if v == "BULLISH")
+        bear = sum(1 for v in sigs.values() if v == "BEARISH")
+        if bull >= 2:
+            bias, summary = "BULLISH", f"🟢 BULLISH ({bull}/3 TF aligned)"
+        elif bear >= 2:
+            bias, summary = "BEARISH", f"🔴 BEARISH ({bear}/3 TF aligned)"
+        else:
+            bias, summary = "NEUTRAL", "⬛ No clear confluence"
+        tf_line = "  |  ".join(
+            f"{lbl}: {'🟢' if s == 'BULLISH' else '🔴' if s == 'BEARISH' else '⬛'}"
+            for lbl, s in sigs.items()
+        )
+        return {"signals": sigs, "bias": bias, "summary": summary, "tf_line": tf_line}
+    except Exception as e:
+        log.warning("MTF confluence failed: %s", e)
+        return {}
+
+
 async def get_option_analysis(expiry: str, spot: float) -> dict:
     """PCR, OI walls, max pain, IV, change in OI from option chain."""
     chain = await get_option_chain(expiry)
@@ -357,7 +471,7 @@ async def get_option_analysis(expiry: str, spot: float) -> dict:
         min_loss = float("inf")
         for k in pain_map:
             loss = sum(
-                c * max(0, s - k) + p * max(0, k - s)
+                c * max(0, k - s) + p * max(0, s - k)
                 for s, (c, p) in pain_map.items()
             )
             if loss < min_loss:
@@ -432,6 +546,72 @@ async def suggest_option(direction: str, spot: float, expiry: str) -> dict:
 
 # ── message formatters ────────────────────────────────────────────────────────
 
+async def format_premarket_brief() -> str:
+    """Global cues + IV rank — sent at 9:00 AM and via /global anytime."""
+    now  = datetime.now(IST)
+    now_str = now.strftime("%d %b %Y")
+    t = now.time()
+    if dtime(9, 0) <= t < dtime(9, 15):
+        subtitle = "_NIFTY opens in ~15 min_"
+    elif dtime(9, 15) <= t <= dtime(15, 30):
+        subtitle = "_Market is OPEN — live snapshot_"
+    else:
+        subtitle = "_Global markets snapshot_"
+
+    cues, iv = await asyncio.gather(
+        asyncio.get_event_loop().run_in_executor(None, _get_global_cues),
+        asyncio.get_event_loop().run_in_executor(None, _get_iv_rank),
+    )
+
+    def _chg(c: float) -> str:
+        return f"{'▲' if c >= 0 else '▼'} {'+' if c >= 0 else ''}{c:.2f}%"
+
+    lines: list[str] = [
+        f"🌏 *Global Cues — {now_str}*",
+        subtitle,
+        "",
+        "🌍 *Overnight US Markets:*",
+    ]
+    if cues:
+        for key, label in (("dow", "Dow Jones"), ("sp500", "S&P 500 "), ("nasdaq", "Nasdaq  ")):
+            d = cues.get(key)
+            if d:
+                lines.append(f"  {label}: `{d['price']:>10,.0f}`  {_chg(d['chg'])}")
+        lines += ["", "💱 *Commodities & FX:*"]
+        for key, label, sym in (
+            ("crude",  "Crude Oil", "$"), ("gold", "Gold     ", "$"), ("usdinr", "USD/INR  ", "₹")
+        ):
+            d = cues.get(key)
+            if d:
+                lines.append(f"  {label}: `{sym}{d['price']:>9,.2f}`  {_chg(d['chg'])}")
+        lines += [
+            "",
+            f"📍 *Gap Bias: {cues.get('gap_bias', 'N/A')}*",
+            f"   Implied NIFTY gap: ~*{cues.get('implied_gap_pct', 0):+.2f}%* at open",
+        ]
+    else:
+        lines.append("  ❌ Global data unavailable")
+
+    if iv:
+        lines += [
+            "",
+            "⚡ *India VIX / IV Rank:*",
+            f"  VIX: *{iv['current']}*  |  IV Rank: *{iv['rank']:.0f}%*  |  IV %ile: {iv['pctile']:.0f}%",
+            f"  52w: High {iv['hi52']}  /  Low {iv['lo52']}",
+            f"  {iv['advice']}",
+        ]
+
+    lines += [
+        "",
+        "🕘 *Opening Gameplan:*",
+        "  • 9:00–9:15 → Do NOT trade, observe",
+        "  • 9:15        → Market opens",
+        "  • 9:30        → ORB-15 setup ready → /entry",
+        "  • 9:10 Brief  → Full analysis with CPR + OI",
+    ]
+    return "\n".join(l for l in lines if l is not None) + CMD_FOOTER
+
+
 async def format_morning_brief() -> str:
     now    = datetime.now(IST).strftime("%d %b %Y")
     regime = await get_regime()
@@ -440,7 +620,11 @@ async def format_morning_brief() -> str:
     expiry = _next_thursday()
     prev   = await get_prev_ohlc()
     oi     = await get_option_analysis(expiry, spot or 0) if spot else {}
-    tech   = await asyncio.get_event_loop().run_in_executor(None, _get_ema_atr_regime)
+    tech, iv_data, mtf = await asyncio.gather(
+        asyncio.get_event_loop().run_in_executor(None, _get_ema_atr_regime),
+        asyncio.get_event_loop().run_in_executor(None, _get_iv_rank),
+        asyncio.get_event_loop().run_in_executor(None, _get_mtf_confluence),
+    )
 
     r_name = regime.get("regime",     "UNKNOWN") if regime else "UNKNOWN"
     conf   = regime.get("confidence",  0)         if regime else 0
@@ -507,6 +691,24 @@ async def format_morning_brief() -> str:
             f"  VWAP: {tech.get('vwap')}  |  ATR: {tech.get('atr')}",
         ]
 
+    # IV Rank
+    if iv_data:
+        lines += [
+            "",
+            "⚡ *IV Rank (India VIX):*",
+            f"  VIX: {iv_data['current']}  |  Rank: *{iv_data['rank']:.0f}%*  |  %ile: {iv_data['pctile']:.0f}%",
+            f"  {iv_data['advice']}",
+        ]
+
+    # Multi-timeframe confluence
+    if mtf:
+        lines += [
+            "",
+            "📡 *Multi-Timeframe Confluence (EMA 9/21):*",
+            f"  {mtf['summary']}",
+            f"  {mtf['tf_line']}",
+        ]
+
     # OI section
     if oi:
         pcr     = oi.get("pcr", 0)
@@ -549,7 +751,8 @@ async def format_morning_brief() -> str:
     return brief + ai + CMD_FOOTER
 
 
-async def format_signal_alert(sig: dict, direction: str, spot: float) -> str:
+async def format_signal_alert(sig: dict, direction: str, spot: float,
+                              mtf: dict | None = None, regime: str = "") -> str:
     strat_key = sig.get("_strategy", "")
     strat     = STRATEGIES.get(strat_key, {})
     strat_name = strat.get("name", strat_key.upper().replace("_", " "))
@@ -601,6 +804,14 @@ async def format_signal_alert(sig: dict, direction: str, spot: float) -> str:
             f"  Best in: {strat['best_in']}",
         ]
 
+    if mtf:
+        lines += [
+            "",
+            "📡 *MTF Confluence:*",
+            f"  {mtf.get('summary', 'N/A')}",
+            f"  {mtf.get('tf_line', '')}",
+        ]
+
     lines += [
         "",
         "⚠️ *Rules:*",
@@ -613,7 +824,7 @@ async def format_signal_alert(sig: dict, direction: str, spot: float) -> str:
         strategy  = strat.get("name", strat_key),
         direction = direction,
         spot      = spot,
-        regime    = "",
+        regime    = regime,
         vix       = opt["vix"],
     )
     return "\n".join(lines) + ai + CMD_FOOTER

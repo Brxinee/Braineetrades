@@ -11,14 +11,16 @@ Scheduled alerts (weekdays, IST):
   Every 30 min 09:00–15:30 — Important market news
 
 Commands:
-  /entry   — best CE/PE right now with T1/T2/SL
-  /regime  — current market regime
-  /oi      — option chain: PCR, CE wall, PE wall, max pain
-  /levels  — CPR + key support/resistance levels
-  /news    — latest market news
-  /expiry  — this week's expiry date
-  /status  — bot health check
-  /test    — fire a test alert now (anytime)
+  /entry      — best CE/PE right now with T1/T2/SL
+  /strategies — 10 strategies with 5Y backtest stats
+  /oi         — option chain: PCR, CE wall, PE wall, max pain
+  /levels     — CPR + key support/resistance levels
+  /regime     — current market regime
+  /global     — global cues, gap bias, IV rank (anytime)
+  /news       — latest market news
+  /expiry     — this week's expiry date
+  /status     — bot health check
+  /test       — fire a test alert now (anytime)
 
 Env vars: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 """
@@ -37,6 +39,7 @@ from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from alerts import (
+    format_premarket_brief,
     format_morning_brief,
     format_signal_alert,
     format_entry_suggestion,
@@ -50,6 +53,7 @@ from alerts import (
     get_regime,
     get_nifty_spot,
     get_nifty_signals,
+    _get_mtf_confluence,
     _next_thursday,
     REGIME_EMOJI,
     STRATEGIES,
@@ -94,6 +98,11 @@ async def _send(text: str) -> None:
 
 # ── scheduled jobs ────────────────────────────────────────────────────────────
 
+async def job_premarket() -> None:
+    log.info("Pre-market global cues")
+    await _send(await format_premarket_brief())
+
+
 async def job_morning_brief() -> None:
     log.info("Morning brief")
     await _send(await format_morning_brief())
@@ -118,6 +127,8 @@ async def job_scan() -> None:
             None
         )
 
+        mtf = await asyncio.get_event_loop().run_in_executor(None, _get_mtf_confluence)
+
         for sig in signals[:2]:
             key = f"{sig.get('_strategy')}:{sig.get('bar_time', sig.get('timestamp', ''))}"
             if key in _last_signals:
@@ -130,8 +141,14 @@ async def job_scan() -> None:
             if conf < 55:
                 continue
 
-            d   = direction or ("BULLISH" if sig.get("side", "").upper() == "LONG" else "BEARISH")
-            msg = await format_signal_alert(sig, d, spot)
+            d = direction or ("BULLISH" if sig.get("side", "").upper() == "LONG" else "BEARISH")
+
+            # Skip if 2+ timeframes align against this signal direction
+            if mtf and mtf.get("bias") not in ("NEUTRAL", d):
+                log.info("MTF filter: drop %s — MTF=%s vs %s", sig.get("_strategy"), mtf["bias"], d)
+                continue
+
+            msg = await format_signal_alert(sig, d, spot, mtf, r_name)
             await _send(msg)
             await asyncio.sleep(1)
 
@@ -164,6 +181,12 @@ async def job_news() -> None:
 
 
 # ── command handlers ──────────────────────────────────────────────────────────
+
+async def cmd_global(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("🌏 Fetching global cues…")
+    msg = await format_premarket_brief()
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
+
 
 async def cmd_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("🔍 Analysing current conditions…")
@@ -274,6 +297,7 @@ def main() -> None:
         "  /oi         — PCR, CE wall, PE wall, max pain\n"
         "  /levels     — CPR pivot levels + key S/R\n"
         "  /regime     — current market regime\n"
+        "  /global     — global cues, gap bias, IV rank\n"
         "  /expiry     — this week's expiry\n"
         "  /news       — market news\n"
         "  /status     — bot health\n"
@@ -286,6 +310,7 @@ def main() -> None:
     _app.add_handler(CommandHandler("oi",         cmd_oi))
     _app.add_handler(CommandHandler("levels",     cmd_levels))
     _app.add_handler(CommandHandler("strategies", cmd_strategies))
+    _app.add_handler(CommandHandler("global",     cmd_global))
     _app.add_handler(CommandHandler("news",   cmd_news))
     _app.add_handler(CommandHandler("expiry", cmd_expiry))
     _app.add_handler(CommandHandler("status", cmd_status))
@@ -294,6 +319,7 @@ def main() -> None:
     s  = AsyncIOScheduler(timezone=IST)
     wd = "mon-fri"
 
+    s.add_job(job_premarket,     CronTrigger(day_of_week=wd, hour=9, minute=0,  timezone=IST))
     s.add_job(job_morning_brief, CronTrigger(day_of_week=wd, hour=9, minute=10, timezone=IST))
 
     for h in range(9, 16):
